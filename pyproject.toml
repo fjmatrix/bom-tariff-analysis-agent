@@ -1,0 +1,24 @@
+[project]
+name = "bom-tariff-analysis-agent"
+version = "0.1.0"
+description = "BOM tariff exposure: roll-up, HTS classification via LLM select, duty and margin exposure"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "pandas>=2.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
