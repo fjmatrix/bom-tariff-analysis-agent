@@ -58,7 +58,7 @@ eval/golden.csv, score.py
 out/                      # components.csv, classified.csv, exposure.csv, audit.jsonl
 ```
 
-Deps: `pandas`, `anthropic`, `httpx`, `pydantic`. Use `uv`.
+Deps: `pandas`, `openai`, `httpx`, `pydantic`. Use `uv`.
 
 ---
 
@@ -77,7 +77,7 @@ Verified against the shipped file: 82 rows, 48 candidates, all 10-digit, every
 one resolves a rate. `ad_valorem is None` occurs only on the four grouping rows
 (`7318`, `7318.14`, `7318.15`, `7319`), which `is_candidate` already excludes.
 
-## Stage 0b — Render the index for the model (M3)
+## Stage 0b — Render the index for the model (M3) — **done**
 
 No search index, no shortlist. The whole in-scope candidate set goes into one
 prompt and the model picks.
@@ -164,7 +164,7 @@ Verified: 216 rows → 162 leaves → **147 unique components**, €1,348.83.
 
 ---
 
-## Stage 2 — Classify (`src/agent/loop.py`) — THE AGENT LOOP (M4)
+## Stage 2 — Classify (`src/agent/loop.py`) — THE AGENT LOOP (M4) — **done**
 
 **One LLM call per component.** No tools, no second call. What makes it a loop is
 what Python does with the answer.
@@ -365,8 +365,8 @@ rate; escalating the ones that can. Arm A vs C measures it.
 |---|---|---|
 | 1 | `hts/index.py` + assertions | **done** |
 | 2 | `bom/flatten.py` + reconcile to 1348.83 | **done** |
-| 3 | `hts/render.py` — numbered tree, every row, rates withheld | 0.5h |
-| 4 | `agent/loop.py` — select, validate evidence, three branches, cache | 3h |
+| 3 | `hts/render.py` — numbered tree, every row, rates withheld | **done** |
+| 4 | `agent/loop.py` — select, validate evidence, three branches, cache | **done** |
 | 5 | `eval/` — golden set incl. out-of-scope, arms A/B/C | 2.5h |
 | 6 | `duty/dataweb.py` + committed snapshot | 2h |
 | 7 | `duty/effective_rate.py` (incl. compound `special`) + `exposure.py` | 2h |

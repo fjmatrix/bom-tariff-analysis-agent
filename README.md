@@ -43,8 +43,8 @@ is per-decision, not per-BOM — see the DIN912 case below.
 |---|---|---|
 | 1 | `hts/index.py` — records, paths, inherited rates | **done** |
 | 2 | `bom/flatten.py` — leaf extraction, roll-up, reconciliation | **done** |
-| 3 | `hts/render.py` — numbered tree, every row, rates withheld | todo |
-| 4 | `agent/loop.py` — select, validate evidence, three branches, cache | todo |
+| 3 | `hts/render.py` — numbered tree, every row, rates withheld | **done** |
+| 4 | `agent/loop.py` — select, validate evidence, three branches, cache | **done** |
 | 5 | `eval/` — golden set, arms A/B/C | todo |
 | 6-9 | DataWeb, effective rate, exposure, recommendations, CLI | todo |
 
@@ -56,7 +56,6 @@ EVOM V1.0 priced.csv         input: priced BOM (216 rows)
 
 src/
   config.py                  input paths
-                             for the audit trail
   hts/
     index.py         [M1]    HtsIndex: parse -> HtsRecord, path strings,
                              inherited rates, parent/child links, lookups
@@ -80,9 +79,12 @@ scripts/
 tests/
   test_hts_index.py          invariants, then shipped-fixture shape (separated)
   test_bom_flatten.py        reconciliation, roll-up, the guards firing
+  test_hts_render.py         numbering, every row present, nothing leaked
+  test_agent_loop.py         every branch, on hand-built selections
 eval/                 [M6]   golden set + arms A/B/C
 out/                         components.csv, classified.csv, exposure.csv,
-                             audit.jsonl, dataweb_cache.json   (gitignored)
+                             audit.jsonl, selection_cache.json,
+                             dataweb_cache.json                 (gitignored)
 ```
 
 ## Workflow
@@ -145,6 +147,17 @@ uv venv && uv pip install -e '.[dev]'
 ```
 
 ```bash
+.venv/bin/python -m src.hts.render
+```
+
+One `5.6-terra` call per component. `--limit N` takes the N most expensive first; a
+rerun is served from `out/selection_cache.json` and costs nothing.
+
+```bash
+.venv/bin/python -m src.agent.loop --limit 5
+```
+
+```bash
 .venv/bin/python -m pytest -q
 ```
 
@@ -193,6 +206,41 @@ The structural checks that used to sit beside it — level continuity, the
 practice; their value is *localization*. Reconciliation says the BOM is off by
 €387, the diagnostic says which seven subassemblies did it. Forensics, not a
 guard.
+
+## What M3 and M4 establish
+
+**The tree (M3)** renders all 82 rows at 2,971 characters against 14,718 for the
+flat candidate paths — 5× — because the tree shows the lineage once instead of
+restating it on every line. Numbering is the candidate list itself, so
+`candidates[n]` is the entire mapping from the model's answer to an HTS code.
+Nothing else is in the text: no codes (the model cannot emit one it never saw)
+and no rates (it cannot be steered by a `Free` sitting next to an `8.5%`).
+`test_hts_render.py` asserts the absence of both, and pins `[19]`/`[25]`/`[30]`
+to the DIN912 readings — a renumbering silently rewrites every cached selection.
+
+**The loop (M4)** is one model call per component and five deterministic
+branches. `resolve()` is pure, so all five are tested against hand-built
+selections with no key and no network.
+
+The measured thing worth knowing: **the rate-invariance suppression can only
+escalate for 7 of the 48 candidates.** A rate is set at the 8-digit legal line,
+and 41 candidates are 10-digit statistical suffixes hanging under one — their
+siblings share the rate by construction, so an unresolved attribute there can
+never move a number. Only the 7 that hang directly off the 4-digit heading have
+siblings that are whole subheadings with rates of their own (coach screws 12.5%,
+rivets Free, cotters 3.8%). That ratio is the branch's whole point, and it is
+asserted in `test_agent_loop.py`, not just claimed here.
+
+Low confidence does not escalate; it demotes the code to `rate_source`, the
+8-digit line the rate came from. Origin-mix precision is lost, the rate stays
+exact, and `selected_code` keeps what the model actually picked so the audit can
+still show it. For the 8 candidates that state their own rate it is a no-op.
+
+The cache stores the **selection**, not the classification. Re-running with
+different branch logic — which is the entire difference between eval arms B and
+C — calls nothing. A prompt fingerprint over the system prompt and model id
+guards the one thing that must not be replayed: a cached `choice: 25` means a
+different code once the tree it indexed changes.
 
 ## The classification cases this is built around
 
