@@ -21,17 +21,21 @@ Full design in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Scope
 
-`htsdata.json` is **heading 7318 only** — 48 classifiable leaves. Of the 162 BOM
-leaves, roughly 40 can honestly land there. The rest cannot: aluminium profile
-is 7604, the T8 lead screw 8483, terminal blocks 8536, the SMPS 8504.
+`htsdata.json` is **heading 7318 only** — 48 classifiable leaves. Of the 147
+unique components, only the fasteners can honestly land there. The rest cannot:
+aluminium profile is 7604, the T8 lead screw 8483, terminal blocks 8536, the
+SMPS 8504. (147 is the count after dedup, which is what classification runs on;
+the 162 figure elsewhere is leaf *rows*.)
 
 The loader is chapter-agnostic; swapping in the full USITC export is a data
 change, not a code change. Until then, anything outside loaded scope routes to
 `out_of_scope` with a reason. It is never guessed.
 
-Magnitude, stated up front: 7318-plausible fasteners are €57.29 of a €1,348.83
-BOM (3.3%), so duty is on the order of €3. The interesting number is
-per-decision, not per-BOM — see the DIN912 case below.
+Magnitude, stated up front: a loose name match on fasteners hits 33 components
+worth **€48.79 of a €1,348.83 BOM — 3.6%**, so duty is on the order of €3. (The
+match is €57.29 / 4.2% before removing the T8 lead screw and its nut, which are
+8483.) The exact in-scope count comes out of eval arm A. The interesting number
+is per-decision, not per-BOM — see the DIN912 case below.
 
 ## Status
 
@@ -39,11 +43,10 @@ per-decision, not per-BOM — see the DIN912 case below.
 |---|---|---|
 | 1 | `hts/index.py` — records, paths, inherited rates | **done** |
 | 2 | `bom/flatten.py` — leaf extraction, roll-up, reconciliation | **done** |
-| 3 | prompt block on `HtsIndex` — tree vs flat, rates hidden | todo |
-| 4 | `hts/tools.py` — get_hts / compare_codes / get_children | todo |
-| 5 | `agent/loop.py` — select, validate, three branches, cap, cache | todo |
-| 6 | `eval/` — golden set, arms A/B/C | todo |
-| 7-10 | DataWeb, effective rate, exposure, recommendations, CLI | todo |
+| 3 | `hts/render.py` — numbered tree, every row, rates withheld | todo |
+| 4 | `agent/loop.py` — select, validate evidence, three branches, cache | todo |
+| 5 | `eval/` — golden set, arms A/B/C | todo |
+| 6-9 | DataWeb, effective rate, exposure, recommendations, CLI | todo |
 
 ## File structure
 
@@ -52,26 +55,25 @@ htsdata.json                 input: HTS export (heading 7318, 82 rows)
 EVOM V1.0 priced.csv         input: priced BOM (216 rows)
 
 src/
-  config.py                  every constant that moves a number, + constants()
+  config.py                  input paths
                              for the audit trail
   hts/
     index.py         [M1]    HtsIndex: parse -> HtsRecord, path strings,
                              inherited rates, parent/child links, lookups
-    candidates.py    [M3]    prompt block: tree or flat, rates withheld
-    tools.py         [M4]    get_hts / compare_codes / get_children
+    render.py        [M3]    numbered tree for the select prompt
   bom/
     flatten.py       [M2]    Bom: load, reconcile, roll up to Components
   agent/
-    loop.py          [M5]    select -> validate -> branch -> terminate
-    prompts.py       [M5]
-    cache.py         [M5]    keyed by component_reference; deterministic replay
+    loop.py          [M4]    select -> validate -> branch -> terminate
+    prompts.py       [M4]
+    cache.py         [M4]    keyed by component_reference; deterministic replay
   duty/
     dataweb.py       [M7]    origin share per HTS10, cached + offline snapshot
     effective_rate.py [M8]   base rate + program/301 modifiers
     exposure.py      [M8]    duty $, margin share, switchable exposure, ranking
   recommend/
     fanout.py        [M9]    top-N only
-  run.py            [M10]    CLI: the whole pipeline
+  run.py             [M9]    CLI: the whole pipeline
 
 scripts/
   diagnose_bom.py            forensic checks, run when reconcile() fires
@@ -98,11 +100,13 @@ per reference, and reconciling to the root. Deterministic; no model involved.
 **2. Classify** — the agent loop, one component at a time. The whole in-scope
 candidate set goes into a single prompt with rates withheld; the model returns
 a choice (or abstains), the phrase that decided it, and any attribute it could
-not settle. Then deterministic validation — code exists, is a leaf, and the
-evidence phrase is a literal substring of the chosen path — and one of three
-branches: confirm out-of-scope, decide an unresolved attribute that cannot move
-the rate (same first 8 digits), or adjudicate two competing readings via
-`compare_codes`. Hard cap at 3 tool calls, then `needs_review`.
+not settle. **One LLM call per component, no tools** — the model reads a
+numbered tree and returns an integer, so it never sees or emits an HTS code and
+cannot invent one. Then deterministic validation — the evidence phrase must be a
+literal substring of the chosen path — and one of three branches: confirm
+out-of-scope; decide an unresolved attribute that cannot move the rate (same
+first 8 digits); or escalate to `needs_review` when a genuine runner-up carries a
+different rate. Every branch is Python.
 → `out/classified.csv`, `out/audit.jsonl`
 
 **3. DataWeb** — one call per distinct HTS10 code (~15–25, not ~150), returning
@@ -111,7 +115,7 @@ a decision. Cached to disk with a committed snapshot so the pipeline runs
 offline. → `out/dataweb_cache.json`
 
 **4. Effective rate** — `Σ(origin_share × rate)`, where the per-country rate is
-Free if the origin matches a program in the `special` column, otherwise the
+Free if the origin matches a free program in the `special` column, otherwise the
 general rate, plus Section 301 where it applies. Arithmetic.
 
 **5. Exposure** — `duty = quantity × unit_price × EUR_USD × effective_rate`,

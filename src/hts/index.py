@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 _TAG = re.compile(r"<[^>]+>")
-_PROGRAMS = re.compile(r"\(([^)]*)\)")
 
 PATH_SEP = " > "
 
@@ -38,7 +37,6 @@ PATH_SEP = " > "
 @dataclass
 class HtsRecord:
     htsno: str  # "" for superior rows -- see note below
-    indent: int
     description: str  # markup stripped
 
     # Filled in during the scan, once the row's position is known.
@@ -48,9 +46,7 @@ class HtsRecord:
 
     general: str = ""  # inherited
     rate_source: str = ""  # which code supplied it
-    ad_valorem: float | None = None  # 0.0 for Free; None for specific/compound
-    special: str = ""
-    special_programs: frozenset[str] = frozenset()
+    ad_valorem: float | None = None  # None only on grouping rows; see parse_rate
 
     @property
     def digits(self) -> int:
@@ -86,13 +82,6 @@ def parse_rate(general: str) -> float | None:
     return float(m.group(1)) / 100 if m else None
 
 
-def parse_special_programs(special: str) -> frozenset[str]:
-    """'Free (A+,AU,B, BH,CL)' -> {'A+','AU','B','BH','CL'}."""
-    m = _PROGRAMS.search(special or "")
-    if not m:
-        return frozenset()
-    codes = (c.strip() for c in m.group(1).replace("\n", " ").split(","))
-    return frozenset(c for c in codes if c)
 
 
 class HtsIndex:
@@ -134,11 +123,8 @@ class HtsIndex:
 
             rec = HtsRecord(
                 htsno=row.get("htsno") or "",
-                indent=indent,
                 description=_clean(row.get("description")),
                 general=(row.get("general") or "").strip(),
-                special=(row.get("special") or "").strip(),
-                special_programs=parse_special_programs(row.get("special") or ""),
             )
             stack.append(rec)
 
@@ -174,9 +160,6 @@ class HtsIndex:
                 rec.general = node.general
                 rec.rate_source = node.htsno
                 rec.ad_valorem = parse_rate(node.general)
-                if not rec.special:
-                    rec.special = node.special
-                    rec.special_programs = node.special_programs
 
     # -- lookups -------------------------------------------------------------
 

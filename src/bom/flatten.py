@@ -13,7 +13,7 @@ BOM from EUR 1,348.83 to EUR 1,735.99. So:
 
 The invariant that holds everywhere, and the one worth asserting, is that a
 parent's extended cost equals the sum of its children's extended costs. Leaf
-extended costs therefore sum to the root's extended cost exactly. `validate()`
+extended costs therefore sum to the root's extended cost exactly. `reconcile()`
 checks it; if a future BOM export changes convention, that assertion fires
 before any duty number is computed on top of it.
 """
@@ -36,7 +36,6 @@ class BomRow:
     name: str
     quantity: float
     parent_reference: str
-    parent_name: str
     has_child_bom: bool
     unit_price_eur: float
     parent_line: int | None = None
@@ -96,7 +95,6 @@ class Bom:
                     name=raw["component_name"].strip(),
                     quantity=float(raw["component_quantity"]),
                     parent_reference=raw["parent_bom_reference"].strip(),
-                    parent_name=raw["parent_bom_name"].strip(),
                     has_child_bom=raw["has_child_bom"].strip() == "True",
                     unit_price_eur=float(raw["unit_price_eur"]),
                 )

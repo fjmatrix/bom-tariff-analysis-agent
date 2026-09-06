@@ -3,7 +3,7 @@
 import pytest
 
 from src.config import HTS_JSON
-from src.hts.index import HtsIndex, parse_rate, parse_special_programs
+from src.hts.index import HtsIndex, parse_rate
 
 
 @pytest.fixture(scope="module")
@@ -118,15 +118,6 @@ def test_rate_is_fixed_at_eight_digits(index):
 def test_parse_rate(raw, expected):
     assert parse_rate(raw) == (pytest.approx(expected) if expected is not None else None)
 
-
-def test_parse_special_programs_handles_whitespace():
-    got = parse_special_programs("Free (A+,AU,B,BH,CL,CO,D,E,IL, JO,KR,MA, OM,P,PA,PE,S,SG)")
-    assert "A+" in got and "JO" in got and "OM" in got
-    assert len(got) == 18
-
-
-def test_parse_special_programs_empty():
-    assert parse_special_programs("") == frozenset()
 
 
 # -- shipped fixture shape ---------------------------------------------------
