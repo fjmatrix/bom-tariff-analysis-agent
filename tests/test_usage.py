@@ -1,7 +1,9 @@
 """Token accounting uses reported totals and preserves unknown usage."""
 
+import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from src.usage import TokenUsage
 
@@ -17,7 +19,9 @@ def test_subsets_are_not_added_to_total_and_trace_is_saved_immediately(tmp_path)
             output_tokens_details=SimpleNamespace(reasoning_tokens=30),
         ),
     )
-    tracker.request(lambda **kwargs: response, "agent", "turn-1", model="requested-model")
+    asyncio.run(tracker.request(
+        AsyncMock(return_value=response), "agent", "turn-1", model="requested-model",
+    ))
     report = json.loads(path.read_text())
     assert report["status"] == "running"
     assert report["totals"]["total_tokens"] == 140

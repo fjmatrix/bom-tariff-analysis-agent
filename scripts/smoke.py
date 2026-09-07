@@ -12,6 +12,7 @@ Delete this file once M4 is settled.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import asdict
 
@@ -27,7 +28,7 @@ def rule(label: str) -> None:
     print(f"\n{'=' * 78}\n{label}\n{'=' * 78}")
 
 
-def main() -> None:
+async def main() -> None:
     index = HtsIndex.load(HTS_JSON)
     tree = render(index)
     component = Bom.load(BOM_CSV).components()[52]  # sorted by cost; [0] is dearest
@@ -42,13 +43,14 @@ def main() -> None:
 
     import openai
 
-    response = openai.OpenAI().responses.parse(
-        model=MODEL,
-        max_output_tokens=MAX_OUTPUT_TOKENS,
-        instructions=system_prompt(tree),
-        input=[{"role": "user", "content": message}],
-        text_format=Selection,
-    )
+    async with openai.AsyncOpenAI() as client:
+        response = await client.responses.parse(
+            model=MODEL,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            instructions=system_prompt(tree),
+            input=[{"role": "user", "content": message}],
+            text_format=Selection,
+        )
 
     rule("RAW RESPONSE")
     print(json.dumps(response.model_dump(mode="json", warnings=False), indent=2))
@@ -60,4 +62,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

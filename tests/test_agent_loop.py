@@ -1,9 +1,11 @@
 """Validate HTS selections and cache reuse without live model calls."""
 
+import asyncio
 import sqlite3
 from contextlib import closing
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -58,7 +60,7 @@ class StubClient:
         choice = next(i for i, r in enumerate(tree.candidates) if r.htsno == "7318.16.00.60")
         self.selection = Selection(choice=choice, evidence="Nuts")
 
-    def parse(self, **kwargs):
+    async def parse(self, **kwargs):
         self.requests.append(kwargs)
         return SimpleNamespace(
             status="completed", output_parsed=self.selection,
@@ -68,13 +70,13 @@ class StubClient:
 def test_disk_cache_reuses_reference_after_description_change(component, tree, tmp_path):
     client = StubClient(tree)
     path = tmp_path / "nested/cache.sqlite3"
-    first = Classifier(tree, ClassificationCache(path), client).run([component])[0]
+    first = asyncio.run(Classifier(tree, ClassificationCache(path), client).run([component]))[0]
     classifier = Classifier(tree, ClassificationCache(path), client)
-    classifier.run([component])
+    asyncio.run(classifier.run([component]))
     assert len(client.requests) == 1
 
     component.name = "Stainless steel coach screw"
-    result = classifier.run([component])[0]
+    result = asyncio.run(classifier.run([component]))[0]
     assert len(client.requests) == 1
     assert result.name == component.name
     assert result.code == first.code
@@ -89,19 +91,19 @@ def test_disk_cache_reuses_reference_after_description_change(component, tree, t
 def test_prompt_and_model_changes_reuse_cache(component, tree, tmp_path, monkeypatch):
     client = StubClient(tree)
     classifier = Classifier(tree, ClassificationCache(tmp_path / "cache.sqlite3"), client)
-    classifier.run([component])
+    asyncio.run(classifier.run([component]))
     classifier.system += "\nChanged classification instructions"
     monkeypatch.setattr("src.classify.classifier.MODEL", "another-model")
-    classifier.run([component])
+    asyncio.run(classifier.run([component]))
     assert len(client.requests) == 1
 
 
 def test_reordered_candidates_reuse_hts_number(component, tree, tmp_path):
     client = StubClient(tree)
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
-    first = Classifier(tree, cache, client).run([component])[0]
+    first = asyncio.run(Classifier(tree, cache, client).run([component]))[0]
     reordered = replace(tree, candidates=list(reversed(tree.candidates)))
-    result = Classifier(reordered, cache, client).run([component])[0]
+    result = asyncio.run(Classifier(reordered, cache, client).run([component]))[0]
     assert result == first
     assert len(client.requests) == 1
 
@@ -118,8 +120,8 @@ def test_unsupported_cached_classification_is_refreshed(
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
     cache.put(component.reference, htsno, evidence)
     classifier = Classifier(tree, cache, client)
-    result = classifier.run([component])[0]
-    classifier.run([component])
+    result = asyncio.run(classifier.run([component]))[0]
+    asyncio.run(classifier.run([component]))
     assert len(client.requests) == 1
     assert cache.get(component.reference) == {
         "reference": component.reference, "htsno": result.code, "evidence": "Nuts",
@@ -151,12 +153,12 @@ def test_cache_writes_are_shared_and_only_store_classification_fields(tmp_path):
 ])
 def test_unresolved_classification_is_not_cached(component, tree, tmp_path, choice, evidence):
     client = SimpleNamespace(responses=SimpleNamespace(
-        parse=lambda **kwargs: SimpleNamespace(
+        parse=AsyncMock(return_value=SimpleNamespace(
             status="completed", output_parsed=Selection(choice=choice, evidence=evidence),
-        ),
+        )),
     ))
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
-    result = Classifier(tree, cache, client).run([component])[0]
+    result = asyncio.run(Classifier(tree, cache, client).run([component]))[0]
     assert result.code is None
     assert cache.get(component.reference) is None
 
@@ -166,16 +168,16 @@ def test_completed_classification_survives_later_failure(component, tree, tmp_pa
     client = StubClient(tree)
     parse = client.parse
 
-    def fail_second(**kwargs):
+    async def fail_second(**kwargs):
         if client.requests:
             raise RuntimeError("provider unavailable")
-        return parse(**kwargs)
+        return await parse(**kwargs)
 
     client.parse = fail_second
     with pytest.raises(RuntimeError, match="provider unavailable"):
-        Classifier(tree, ClassificationCache(path), client).run([
+        asyncio.run(Classifier(tree, ClassificationCache(path), client).run([
             component, replace(component, reference="X2"),
-        ])
+        ]))
     assert ClassificationCache(path).get(component.reference)["htsno"] == "7318.16.00.60"
     assert ClassificationCache(path).get("X2") is None
 
@@ -188,9 +190,9 @@ def test_missing_or_incomplete_answer_is_not_cached(
     component, tree, tmp_path, status, selection,
 ):
     client = SimpleNamespace(responses=SimpleNamespace(
-        parse=lambda **kwargs: SimpleNamespace(status=status, output_parsed=selection),
+        parse=AsyncMock(return_value=SimpleNamespace(status=status, output_parsed=selection)),
     ))
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
     with pytest.raises(RuntimeError, match="no complete classification"):
-        Classifier(tree, cache, client).run([component])
+        asyncio.run(Classifier(tree, cache, client).run([component]))
     assert cache.get(component.reference) is None

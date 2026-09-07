@@ -7,7 +7,7 @@ def percent(numerator, denominator):
     return round(100 * numerator / denominator, 4) if denominator > 0 else None
 
 
-def build_brief_data(components, classifications, scenarios, index):
+def build_brief_data(components, classifications, scenarios, index, country_rankings):
     total_cost = sum(part.extended_cost_usd for part in components)
     classified = {row.reference: row for row in classifications}
     exposures = []
@@ -66,6 +66,8 @@ def build_brief_data(components, classifications, scenarios, index):
         })
     current_total = round(sum(row["current_duty_per_finished_product_usd"] for row in exposures), 2)
     savings_total = round(sum(row["duty_savings_per_finished_product_usd"] for row in opportunities), 2)
+    # Country discovery uses the same period for every HTS lookup, including failures.
+    ranking = next(iter(country_rankings.values()), None)
     return {
         "currency": "USD",
         "basis": "One finished product; purchased parts imported separately.",
@@ -91,6 +93,14 @@ def build_brief_data(components, classifications, scenarios, index):
         )),
         "unresolved_parts": unresolved,
         "unsupported_alternatives": alternative_errors,
+        "trade_period": {
+            "period_start": ranking["period_start"],
+            "period_end": ranking["period_end"],
+        } if ranking is not None else None,
+        "lookup_errors": {
+            code: ranking["error"] for code, ranking in country_rankings.items()
+            if "error" in ranking
+        },
         "break_even_note": "Per-piece current purchase price × (1 + current duty rate) / "
                            "(1 + alternative duty rate). Excludes freight, tooling, "
                            "qualification, switching costs, and other unmodeled duties. "

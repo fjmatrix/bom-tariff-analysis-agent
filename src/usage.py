@@ -16,9 +16,9 @@ class TokenUsage:
         self.events = []
         self.status = "running"
 
-    def request(self, method, stage, label, **kwargs):
+    async def request(self, method, stage, label, **kwargs):
         try:
-            response = method(**kwargs)
+            response = await method(**kwargs)
         except Exception as error:
             self.record(stage, label, kwargs["model"], status=type(error).__name__)
             raise

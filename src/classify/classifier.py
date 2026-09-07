@@ -60,7 +60,7 @@ class Classifier:
         self.system = system_prompt(tree)
         self.usage = usage if usage is not None else TokenUsage()
 
-    def select(self, component: Component) -> Selection:
+    async def select(self, component: Component) -> Selection:
         cached = self.cache.get(component.reference)
         if cached is not None:
             for choice, candidate in enumerate(self.tree.candidates):
@@ -71,7 +71,7 @@ class Classifier:
                         return selection
                     break
         prompt = component_prompt(component)
-        response = self.usage.request(
+        response = await self.usage.request(
             self.client.responses.parse, "classification", component.reference,
             model=MODEL,
             max_output_tokens=MAX_OUTPUT_TOKENS,
@@ -87,8 +87,8 @@ class Classifier:
             self.cache.put(component.reference, classification.code, classification.evidence)
         return selection
 
-    def run(self, components: list[Component]) -> list[Classification]:
-        return [resolve(c, self.select(c), self.tree.candidates) for c in components]
+    async def run(self, components: list[Component]) -> list[Classification]:
+        return [resolve(c, await self.select(c), self.tree.candidates) for c in components]
 
 
 def write_classified(rows: list[Classification], path: str | Path) -> None:

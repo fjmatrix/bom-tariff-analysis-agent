@@ -1,8 +1,10 @@
 """Exercise the workflow with model and DataWeb responses replaced."""
 
+import asyncio
 import json
 from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -26,7 +28,7 @@ def fake_usage(input_tokens=100, output_tokens=20):
     )
 
 
-def fake_discovery(codes, top_n):
+async def fake_discovery(codes, top_n):
     assert top_n == 1
     return {
         code.replace(".", ""): {
@@ -48,7 +50,7 @@ class DemoClient:
             None,
         ])
 
-    def create(self, **kwargs):
+    async def create(self, **kwargs):
         self.requests.append(deepcopy(kwargs))
         name = next(self.sequence)
         if name is not None:
@@ -77,7 +79,7 @@ class DemoClient:
             output=[SimpleNamespace(type="message", content=brief)],
         )
 
-    def parse(self, **kwargs):
+    async def parse(self, **kwargs):
         self.classifier_calls += 1
         prompt = kwargs["input"][0]["content"]
         code = "7318.16.00.60" if "DEMO-NUT" in prompt else "7318.21.00.30"
@@ -89,10 +91,26 @@ class DemoClient:
 
 
 def execute(client, tmp_path):
-    return run(
+    return asyncio.run(run(
         ROOT / "examples/two_parts.csv", 1, tmp_path,
         client=client, country_discovery=fake_discovery,
-    )
+    ))
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_owned_client_closes_after_success_or_failure(tmp_path, monkeypatch, fails):
+    client = DemoClient()
+    if fails:
+        client.create = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+    context = AsyncMock()
+    context.__aenter__.return_value = client
+    monkeypatch.setattr("src.run.AsyncOpenAI", lambda: context)
+    if fails:
+        with pytest.raises(RuntimeError, match="provider unavailable"):
+            execute(None, tmp_path)
+    else:
+        execute(None, tmp_path)
+    context.__aexit__.assert_awaited_once()
 
 
 def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
@@ -110,6 +128,8 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert client.requests[1]["input"][-1]["call_id"] == "call-1"
     assert client.requests[2]["input"][-1]["call_id"] == "call-2"
     assert client.requests[3]["input"][-1]["call_id"] == "call-3"
+    for request in client.requests[1:3]:
+        assert json.loads(request["input"][-1]["output"]) == {"status": "success"}
     assert "$0.58" in brief
     assert (tmp_path / "brief.md").read_text() == brief
     scenarios = [json.loads(line) for line in (tmp_path / "scenarios.jsonl").read_text().splitlines()]
@@ -117,6 +137,8 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert scenarios == [{reference: part} for reference, part in result["scenarios"].items()]
     facts = json.loads((tmp_path / "brief_data.json").read_text())
     assert result["brief_data"] == facts
+    assert facts["trade_period"] == {"period_start": "09/2025", "period_end": "08/2026"}
+    assert facts["lookup_errors"] == {}
     assert facts["summary"]["known_current_duty_per_finished_product_usd"] == 0.58
     assert facts["summary"]["potentially_addressable_pct_known_exposure"] == 100
     assert facts["sourcing_opportunities"][0]["break_even_alternative_purchase_price_per_piece_usd"] == 0.529
@@ -175,23 +197,25 @@ def test_repeated_tools_reuse_completed_work(tmp_path):
     client = DemoClient()
     calls = []
 
-    def discovery(codes, top_n):
+    async def discovery(codes, top_n):
         calls.append((codes, top_n))
-        return fake_discovery(codes, top_n)
+        return await fake_discovery(codes, top_n)
 
     analysis = BomAnalysis(
         ROOT / "examples/two_parts.csv", 1, tmp_path, client, discovery,
     )
-    first = analysis.classify_bom()
-    assert analysis.classify_bom() == first
+    first = asyncio.run(analysis.classify_bom())
+    assert asyncio.run(analysis.classify_bom()) == first == {"status": "success"}
     assert client.classifier_calls == 2
 
-    rankings = analysis.find_top_import_countries()
-    assert analysis.find_top_import_countries() is rankings
+    assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
+    rankings = analysis.country_rankings
+    assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
+    assert analysis.country_rankings is rankings
     assert calls == [(["7318.16.00.60", "7318.21.00.30"], 1)]
 
-    result = analysis.calculate_duty_scenarios()
-    assert analysis.calculate_duty_scenarios() is result
+    result = asyncio.run(analysis.calculate_duty_scenarios())
+    assert asyncio.run(analysis.calculate_duty_scenarios()) is result
     assert set(result) == {"DEMO-NUT", "DEMO-WASHER"}
     assert rankings["7318210030"]["period_start"] == "09/2025"
 
@@ -210,7 +234,7 @@ def test_unknown_tool_returns_feedback_without_dispatch(tmp_path):
 
 
 def test_country_lookup_errors_still_allow_current_origin_scenarios(tmp_path):
-    def discovery(codes, top_n):
+    async def discovery(codes, top_n):
         return {
             code.replace(".", ""): {
                 "period_start": "09/2025", "period_end": "08/2026",
@@ -221,13 +245,20 @@ def test_country_lookup_errors_still_allow_current_origin_scenarios(tmp_path):
     analysis = BomAnalysis(
         ROOT / "examples/two_parts.csv", 1, tmp_path, DemoClient(), discovery,
     )
-    analysis.classify_bom()
-    analysis.find_top_import_countries()
-    result = analysis.calculate_duty_scenarios()
+    assert asyncio.run(analysis.classify_bom()) == {"status": "success"}
+    assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
+    result = asyncio.run(analysis.calculate_duty_scenarios())
     assert result["DEMO-WASHER"]["countries"] == {
         "CN": {"duty_usd": 0.58, "savings_usd": 0.0},
     }
     assert set(result) == {"DEMO-NUT", "DEMO-WASHER"}
+    assert analysis.brief_data["trade_period"] == {
+        "period_start": "09/2025", "period_end": "08/2026",
+    }
+    assert analysis.brief_data["lookup_errors"] == {
+        "7318160060": "unavailable", "7318210030": "unavailable",
+    }
+    assert json.loads((tmp_path / "brief_data.json").read_text()) == analysis.brief_data
 
 
 @pytest.mark.parametrize("arguments", ['{"country": "CA"}', "invalid", "null", "[]"])
@@ -235,8 +266,8 @@ def test_bad_arguments_do_not_execute_tool(tmp_path, arguments):
     client = DemoClient(["classify_bom"] * MAX_TURNS)
     original = client.create
 
-    def create(**kwargs):
-        response = original(**kwargs)
+    async def create(**kwargs):
+        response = await original(**kwargs)
         response.output[0].arguments = arguments
         return response
 
@@ -266,8 +297,8 @@ def test_incomplete_response_does_not_execute_tool(tmp_path):
     client = DemoClient()
     original = client.create
 
-    def create(**kwargs):
-        response = original(**kwargs)
+    async def create(**kwargs):
+        response = await original(**kwargs)
         response.status = "incomplete"
         return response
 
@@ -285,7 +316,7 @@ def test_incomplete_response_does_not_execute_tool(tmp_path):
 def test_classification_exception_preserves_outer_usage(tmp_path):
     client = DemoClient()
 
-    def parse(**kwargs):
+    async def parse(**kwargs):
         raise RuntimeError("provider unavailable")
 
     client.parse = parse

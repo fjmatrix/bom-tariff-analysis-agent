@@ -1,11 +1,12 @@
 """Classify a BOM, discover sourcing countries, and write a duty brief."""
 
 import argparse
+import asyncio
 import json
-from dataclasses import asdict
+from contextlib import nullcontext
 from pathlib import Path
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from src.classify.cache import ClassificationCache
 from src.classify.classifier import MODEL, MAX_OUTPUT_TOKENS, Classifier, write_classified
@@ -32,7 +33,7 @@ Identify partial exposure prominently with coverage by part count and BOM cost.
 Null metrics mean unavailable, never zero. Zero known duty makes the addressable
 percentage not applicable. No discovered savings does not prove none exist.
 2) Product Exposure: this input is one finished-product BOM, not a portfolio.
-Show a table of its top 10 purchased parts by current duty (or all if fewer),
+Show a table of its top 10 purchased parts by current duty,
 with reference/name, current origin, current duty per finished product, and
 exposure as % of TOTAL BOM cost. Label this as a part-level breakdown. Do not
 confuse quantities per finished product with annual production volume.
@@ -82,20 +83,14 @@ class BomAnalysis:
         self.brief_data = None
         self.country_discovery = country_discovery
 
-    def classify_bom(self):
+    async def classify_bom(self):
         if self.classifications is None:
-            self.classifications = self.classifier.run(self.components)
+            self.classifications = await self.classifier.run(self.components)
             write_components(self.components, self.out_dir / "components.csv")
             write_classified(self.classifications, self.out_dir / "classified.csv")
-        return [
-            {
-                **asdict(classification),
-                "country_of_origin": part.country_of_origin,
-            }
-            for part, classification in zip(self.components, self.classifications)
-        ]
+        return {"status": "success"}
 
-    def find_top_import_countries(self):
+    async def find_top_import_countries(self):
         if self.classifications is None:
             return {"error": "Call classify_bom before find_top_import_countries."}
         if self.country_rankings is None:
@@ -103,13 +98,13 @@ class BomAnalysis:
                 row.code for row in self.classifications
                 if row.status == "classified" and row.code
             ]
-            self.country_rankings = self.country_discovery(codes, self.top_countries)
+            self.country_rankings = await self.country_discovery(codes, self.top_countries)
             write_country_rankings(
                 self.country_rankings, self.out_dir / "trade_countries.jsonl",
             )
-        return self.country_rankings
+        return {"status": "success"}
 
-    def calculate_duty_scenarios(self):
+    async def calculate_duty_scenarios(self):
         if self.classifications is None:
             return {"error": "Call classify_bom before calculate_duty_scenarios."}
         if self.country_rankings is None:
@@ -125,6 +120,7 @@ class BomAnalysis:
             write_scenarios(self.scenarios, self.out_dir / "scenarios.jsonl")
             self.brief_data = build_brief_data(
                 self.components, self.classifications, self.scenarios, self.index,
+                self.country_rankings,
             )
             (self.out_dir / "brief_data.json").write_text(
                 json.dumps(self.brief_data, indent=2, ensure_ascii=False) + "\n",
@@ -133,19 +129,19 @@ class BomAnalysis:
         return self.scenarios
 
 
-def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -> str:
+async def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -> str:
     usage = TokenUsage(Path(out_dir) / "token_usage.json")
     status = "failed"
     try:
-        brief = _run(bom_path, top_countries, out_dir, client, country_discovery, usage)
+        async with nullcontext(client) if client is not None else AsyncOpenAI() as client:
+            brief = await _run(bom_path, top_countries, out_dir, client, country_discovery, usage)
         status = "completed"
         return brief
     finally:
         usage.finish(status)
 
 
-def _run(bom_path, top_countries, out_dir, client, country_discovery, usage) -> str:
-    client = client if client is not None else OpenAI()
+async def _run(bom_path, top_countries, out_dir, client, country_discovery, usage) -> str:
     analysis = BomAnalysis(
         bom_path, top_countries, out_dir, client,
         country_discovery or discover_top_import_countries,
@@ -176,7 +172,7 @@ def _run(bom_path, top_countries, out_dir, client, country_discovery, usage) -> 
         "strict": True,
     } for name, (description, _) in actions.items()]
     for turn in range(1, MAX_TURNS + 1):
-        response = usage.request(
+        response = await usage.request(
             client.responses.create, "agent", f"turn-{turn}",
             model=MODEL,
             instructions=INSTRUCTIONS,
@@ -219,7 +215,7 @@ def _run(bom_path, top_countries, out_dir, client, country_discovery, usage) -> 
             result = {"error": "These tools accept only an empty object of arguments."}
         else:
             # Tool execution
-            result = actions[call.name][1]()
+            result = await actions[call.name][1]()
             if call.name == "calculate_duty_scenarios" and analysis.brief_data is not None:
                 result = {"scenarios": result, "brief_data": analysis.brief_data}
         output = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
@@ -237,7 +233,7 @@ def main() -> None:
                         help="Leading import origins to compare per HTS code (default: 5)")
     parser.add_argument("--out", type=Path, default=OUT_DIR, help="Output directory")
     args = parser.parse_args()
-    run(args.bom, args.top_countries, args.out)
+    asyncio.run(run(args.bom, args.top_countries, args.out))
 
 
 if __name__ == "__main__":

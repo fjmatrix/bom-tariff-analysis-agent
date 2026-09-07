@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import date
 from unittest.mock import patch
@@ -50,11 +51,11 @@ def test_report_request_sums_partial_years_and_ranks_countries(monkeypatch):
         ["China", "73182100", "Washers", "2,000", "0"],
         ["Japan", "73182100", "Washers", "0", "0"],
     ]
-    with patch("src.duty.dataweb.httpx.post", return_value=response(rows)) as post:
-        result = get_imports_by_country(
+    with patch("src.duty.dataweb.httpx.AsyncClient.post", return_value=response(rows)) as post:
+        result = asyncio.run(get_imports_by_country(
             "7318.21.00", "09/2025", "08/2026",
             {"Canada": "CA", "China": "CN", "Japan": "JP"},
-        )
+        ))
     assert result == [
         {"country": "CN", "customs_value_usd": 2000},
         {"country": "CA", "customs_value_usd": 1600},
@@ -82,17 +83,17 @@ def test_report_request_sums_partial_years_and_ranks_countries(monkeypatch):
 @pytest.mark.parametrize("code", ["", "7318", "7318156x", "７３１８１５６０"])
 def test_invalid_code_does_not_call_api(monkeypatch, code):
     monkeypatch.setenv("DATAWEB_API_KEY", "test-token")
-    with patch("src.duty.dataweb.httpx.post") as post:
+    with patch("src.duty.dataweb.httpx.AsyncClient.post") as post:
         with pytest.raises(ValueError, match="HTS code"):
-            get_imports_by_country(code, "09/2025", "08/2026")
+            asyncio.run(get_imports_by_country(code, "09/2025", "08/2026"))
         post.assert_not_called()
 
 
 def test_missing_key_does_not_call_api(monkeypatch):
     monkeypatch.delenv("DATAWEB_API_KEY", raising=False)
-    with patch("src.duty.dataweb.httpx.post") as post:
+    with patch("src.duty.dataweb.httpx.AsyncClient.post") as post:
         with pytest.raises(ValueError, match="DATAWEB_API_KEY"):
-            get_imports_by_country("73182100", "09/2025", "08/2026")
+            asyncio.run(get_imports_by_country("73182100", "09/2025", "08/2026"))
         post.assert_not_called()
 
 
@@ -105,9 +106,9 @@ def test_missing_key_does_not_call_api(monkeypatch):
 ])
 def test_failed_report(monkeypatch, reply, error):
     monkeypatch.setenv("DATAWEB_API_KEY", "test-token")
-    with patch("src.duty.dataweb.httpx.post", return_value=reply):
+    with patch("src.duty.dataweb.httpx.AsyncClient.post", return_value=reply):
         with pytest.raises(error):
-            get_imports_by_country("73182100", "09/2025", "08/2026", {})
+            asyncio.run(get_imports_by_country("73182100", "09/2025", "08/2026", {}))
 
 
 @pytest.mark.parametrize("rows,error", [
@@ -116,9 +117,11 @@ def test_failed_report(monkeypatch, reply, error):
 ])
 def test_unmapped_country_and_suppressed_value_fail_explicitly(monkeypatch, rows, error):
     monkeypatch.setenv("DATAWEB_API_KEY", "test-token")
-    with patch("src.duty.dataweb.httpx.post", return_value=response(rows)):
+    with patch("src.duty.dataweb.httpx.AsyncClient.post", return_value=response(rows)):
         with pytest.raises(ValueError, match=error):
-            get_imports_by_country("73182100", "09/2025", "08/2026", {"Canada": "CA"})
+            asyncio.run(get_imports_by_country(
+                "73182100", "09/2025", "08/2026", {"Canada": "CA"},
+            ))
 
 
 def test_discovery_deduplicates_codes_limits_each_ranking_and_keeps_errors():
@@ -129,18 +132,18 @@ def test_discovery_deduplicates_codes_limits_each_ranking_and_keeps_errors():
         ],
     }
 
-    def imports(code, start, end, country_codes):
+    async def imports(code, start, end, country_codes, *, client):
         if code == "7318210030":
             raise ValueError("no rows")
         return values[code]
 
     with patch("src.duty.dataweb._country_codes", return_value={"China": "CN"}), \
          patch("src.duty.dataweb.get_imports_by_country", side_effect=imports) as get:
-        result = discover_top_import_countries(
+        result = asyncio.run(discover_top_import_countries(
             ["7318.21.00.30", "7318.16.00.60", "7318.16.00.60"],
             1,
             date(2026, 9, 7),
-        )
+        ))
     assert get.call_count == 2
     assert result == {
         "7318160060": {
@@ -156,15 +159,37 @@ def test_discovery_deduplicates_codes_limits_each_ranking_and_keeps_errors():
 
 def test_no_classified_codes_skip_dataweb():
     with patch("src.duty.dataweb._country_codes") as countries:
-        result = discover_top_import_countries([], 5, date(2026, 9, 7))
+        result = asyncio.run(discover_top_import_countries([], 5, date(2026, 9, 7)))
     countries.assert_not_called()
     assert result == {}
+
+
+def test_discovery_reuses_and_closes_client_for_mapping_and_reports(monkeypatch):
+    monkeypatch.setenv("DATAWEB_API_KEY", "test-token")
+    methods = []
+
+    async def respond(request):
+        await asyncio.sleep(0)
+        methods.append(request.method)
+        if request.method == "GET":
+            return httpx.Response(200, json={
+                "options": [{"name": "Canada - 1220 - CA", "iso2": "CA"}],
+            })
+        return response([["Canada", "73182100", "Washers", "1", "2"]])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    with patch("src.duty.dataweb.httpx.AsyncClient", return_value=client) as factory:
+        result = asyncio.run(discover_top_import_countries(["73182100", "73181600"], 1))
+    factory.assert_called_once_with()
+    assert methods == ["GET", "POST", "POST"]
+    assert all(row["countries"] == {"CA": {"customs_value_usd": 3}} for row in result.values())
+    assert client.is_closed
 
 
 def test_country_mapping_failure_preserves_per_code_errors():
     with patch("src.duty.dataweb._country_codes", side_effect=ValueError("unavailable")), \
          patch("src.duty.dataweb.get_imports_by_country") as get:
-        result = discover_top_import_countries(["7318.21.00", "7318.16.00"], 5)
+        result = asyncio.run(discover_top_import_countries(["7318.21.00", "7318.16.00"], 5))
     get.assert_not_called()
     assert set(result) == {"73182100", "73181600"}
     assert all(row["countries"] == {} and row["error"] == "unavailable" for row in result.values())

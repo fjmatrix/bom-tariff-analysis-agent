@@ -1,8 +1,10 @@
 """Find leading U.S. import origins for classified HTS codes."""
 
 import argparse
+import asyncio
 import json
 import os
+from contextlib import nullcontext
 from datetime import date
 from pathlib import Path
 
@@ -118,8 +120,8 @@ def _report_rows(report: dict) -> list[tuple[str, int]]:
     return parsed
 
 
-def _country_codes() -> dict[str, str]:
-    response = httpx.get(COUNTRIES_URL, timeout=30)
+async def _country_codes(client: httpx.AsyncClient) -> dict[str, str]:
+    response = await client.get(COUNTRIES_URL, timeout=30)
     response.raise_for_status()
     options = response.json().get("options")
     if not isinstance(options, list):
@@ -131,32 +133,34 @@ def _country_codes() -> dict[str, str]:
     }
 
 
-def get_imports_by_country(
+async def get_imports_by_country(
     hts_code: str,
     start: str,
     end: str,
     country_codes: dict[str, str] | None = None,
+    *, client: httpx.AsyncClient | None = None,
 ) -> list[dict]:
     """Return consumption customs value by origin over the requested months."""
     code = _code(hts_code)
     token = os.environ.get("DATAWEB_API_KEY")
     if not token:
         raise ValueError("DATAWEB_API_KEY is not configured")
-    response = httpx.post(
-        REPORT_URL,
-        headers={"Authorization": f"Bearer {token}"},
-        json=_payload(code, start, end),
-        timeout=120,
-    )
-    response.raise_for_status()
-    report = response.json().get("dto")
-    if isinstance(report, dict) and (report.get("errors") or report.get("needMoreTime")):
-        raise ValueError("DataWeb could not complete the report")
-    if not isinstance(report, dict) or not report.get("tables"):
-        raise ValueError("DataWeb returned no report tables")
+    async with nullcontext(client) if client is not None else httpx.AsyncClient() as client:
+        response = await client.post(
+            REPORT_URL,
+            headers={"Authorization": f"Bearer {token}"},
+            json=_payload(code, start, end),
+            timeout=120,
+        )
+        response.raise_for_status()
+        report = response.json().get("dto")
+        if isinstance(report, dict) and (report.get("errors") or report.get("needMoreTime")):
+            raise ValueError("DataWeb could not complete the report")
+        if not isinstance(report, dict) or not report.get("tables"):
+            raise ValueError("DataWeb returned no report tables")
 
-    if country_codes is None:
-        country_codes = _country_codes()
+        if country_codes is None:
+            country_codes = await _country_codes(client)
     result = []
     for name, value in _report_rows(report):
         country = country_codes.get(name)
@@ -169,7 +173,7 @@ def get_imports_by_country(
     return sorted(result, key=lambda row: (-row["customs_value_usd"], row["country"]))
 
 
-def discover_top_import_countries(
+async def discover_top_import_countries(
     hts_codes: list[str], top_n: int, today: date | None = None,
 ) -> dict:
     """Query each distinct code and retain its top origins by customs value."""
@@ -183,22 +187,25 @@ def discover_top_import_countries(
         code: {"period_start": start, "period_end": end, "countries": {}}
         for code in codes
     }
-    try:
-        country_codes = _country_codes()
-    except (httpx.HTTPError, ValueError, KeyError) as exc:
-        for ranking in result.values():
-            ranking["error"] = str(exc)
-        return result
-    for code in codes:
+    async with httpx.AsyncClient() as client:
         try:
-            countries = get_imports_by_country(code, start, end, country_codes)[:top_n]
+            country_codes = await _country_codes(client)
         except (httpx.HTTPError, ValueError, KeyError) as exc:
-            result[code]["error"] = str(exc)
-            continue
-        result[code]["countries"] = {
-            row["country"]: {"customs_value_usd": row["customs_value_usd"]}
-            for row in countries
-        }
+            for ranking in result.values():
+                ranking["error"] = str(exc)
+            return result
+        for code in codes:
+            try:
+                countries = await get_imports_by_country(
+                    code, start, end, country_codes, client=client,
+                )
+            except (httpx.HTTPError, ValueError, KeyError) as exc:
+                result[code]["error"] = str(exc)
+                continue
+            result[code]["countries"] = {
+                row["country"]: {"customs_value_usd": row["customs_value_usd"]}
+                for row in countries[:top_n]
+            }
     return result
 
 
@@ -216,4 +223,6 @@ if __name__ == "__main__":
     parser.add_argument("hts_code")
     parser.add_argument("--top", type=int, default=5)
     args = parser.parse_args()
-    print(json.dumps(discover_top_import_countries([args.hts_code], args.top), indent=2))
+    print(json.dumps(
+        asyncio.run(discover_top_import_countries([args.hts_code], args.top)), indent=2,
+    ))

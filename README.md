@@ -10,6 +10,9 @@ finish before duty calculation. The brief is accepted only after calculation
 succeeds. Invalid calls return feedback, repeated calls reuse completed work,
 and the conversation is limited to eight model turns.
 
+OpenAI and DataWeb requests use async clients. Python callers await `run(...)`;
+the command-line entry points manage the event loop. Requests remain sequential.
+
 The tools are:
 
 - `classify_bom()`: one structured model selection per uncached distinct part.
@@ -17,6 +20,9 @@ The tools are:
   for each distinct classified HTS code over the last 12 complete months.
 - `calculate_duty_scenarios()`: deterministic HTS rate selection, arithmetic,
   and country comparisons grouped by part reference.
+
+Classification and country discovery retain their results and write their output
+files, returning only `{"status":"success"}` to the model after completion.
 
 ## Run
 
@@ -218,7 +224,8 @@ Example `trade_countries.jsonl` line:
 
 Scenarios contain only part entries, without repeated summary rankings or trade
 metadata. The agent's calculation tool returns these under `scenarios`, alongside
-the computed `brief_data` used to write the brief.
+the computed `brief_data` used to write the brief. The latter includes the shared
+`trade_period` (null when no lookups ran) and `lookup_errors` keyed by HTS code.
 
 The classifier returns only a candidate number (or null) and evidence. Python
 validates the index and checks the evidence against the candidate's HTS path.

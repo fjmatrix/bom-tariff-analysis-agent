@@ -25,12 +25,29 @@ def inputs():
     return components, classifications, index
 
 
-def facts(inputs, countries=("JP",)):
+def facts(inputs, countries=("JP",), country_rankings=None):
     components, classifications, index = inputs
     scenarios = calculate_duty_scenarios(
         components, classifications, index, {"1234.56.78": list(countries)},
     )
-    return build_brief_data(components, classifications, scenarios, index)
+    return build_brief_data(components, classifications, scenarios, index, country_rankings or {})
+
+
+def test_trade_period_and_lookup_errors(inputs):
+    period = {"period_start": "09/2025", "period_end": "08/2026"}
+    rankings = {
+        "12345678": {**period, "countries": {"JP": {"customs_value_usd": 100}}},
+        "87654321": {**period, "countries": {}, "error": "unavailable"},
+    }
+    result = facts(inputs, country_rankings=rankings)
+    assert result["trade_period"] == period
+    assert result["lookup_errors"] == {"87654321": "unavailable"}
+
+
+def test_no_country_lookups_have_no_trade_period_or_errors(inputs):
+    result = facts(inputs)
+    assert result["trade_period"] is None
+    assert result["lookup_errors"] == {}
 
 
 def test_summary_ranking_and_nonzero_alternative_rate(inputs):
