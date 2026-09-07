@@ -12,6 +12,11 @@ from src.hts.index import HtsIndex
 from src.run import MAX_TURNS, BomAnalysis, run
 
 
+@pytest.fixture(autouse=True)
+def isolate_classification_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.classify.cache.ROOT", tmp_path)
+
+
 def fake_usage(input_tokens=100, output_tokens=20):
     return SimpleNamespace(
         input_tokens=input_tokens, output_tokens=output_tokens,
@@ -135,9 +140,12 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     ]
 
     replay = DemoClient()
-    execute(replay, tmp_path)
+    replay_out = tmp_path / "another-output"
+    execute(replay, replay_out)
     assert replay.classifier_calls == 0
-    replay_usage = json.loads((tmp_path / "token_usage.json").read_text())
+    assert (tmp_path / ".cache/classification.sqlite3").is_file()
+    assert not (replay_out / "selection_cache.json").exists()
+    replay_usage = json.loads((replay_out / "token_usage.json").read_text())
     assert replay_usage["totals"]["total_tokens"] == 480
     assert replay_usage["stages"]["classification"]["cache_hits"] == 2
     assert replay_usage["stages"]["classification"]["api_calls"] == 0

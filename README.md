@@ -42,10 +42,12 @@ option has been removed.
 On a cold cache, the two-part demo normally uses two classification calls and
 four outer model calls: classify, discover countries, calculate, then summarize.
 Recovery or repeated tool requests can add turns. Later runs reuse cached
-classifications. Changing
-a part description, assembly context, model, or classification prompt/tree
-invalidates that selection. The cache stores selections by a hash of the model
-and complete prompts. Legacy or malformed entries are refreshed on demand.
+classifications from the shared SQLite database at `.cache/classification.sqlite3`,
+independently of the output directory. It stores only `reference`, `htsno`, and
+`evidence`, keyed by part reference. Description, assembly context, model, and
+prompt changes do not invalidate entries. Cached codes and evidence are checked
+against the current HTS tree; unsupported entries are refreshed. Only validated
+classifications are cached. Old JSON selection caches are no longer used.
 
 ## HTS rate selection
 
@@ -195,7 +197,7 @@ and must have the same unit price and origin. The assembly root must reconcile
 with the total purchased-part value.
 
 Outputs are `brief.md`, `brief_data.json`, `token_usage.json`, `scenarios.jsonl`,
-`trade_countries.jsonl`, `components.csv`, `classified.csv`, and `selection_cache.json`.
+`trade_countries.jsonl`, `components.csv`, and `classified.csv`.
 Tool calls, results, and token counts print in the terminal.
 Both comparison tools return objects. Scenarios are keyed by part reference;
 country rankings are keyed by HTS code. Each JSONL line contains one such entry,

@@ -4,9 +4,9 @@ import csv
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
-from src.classify.cache import SelectionCache, fingerprint
+from src.classify.cache import ClassificationCache
 from src.classify.prompts import component_prompt, system_prompt
 from src.bom.flatten import Component
 from src.hts.index import HtsRecord
@@ -53,7 +53,7 @@ def resolve(
 
 
 class Classifier:
-    def __init__(self, tree: CandidateTree, cache: SelectionCache, client, usage=None):
+    def __init__(self, tree: CandidateTree, cache: ClassificationCache, client, usage=None):
         self.tree = tree
         self.cache = cache
         self.client = client
@@ -61,17 +61,16 @@ class Classifier:
         self.usage = usage if usage is not None else TokenUsage()
 
     def select(self, component: Component) -> Selection:
-        prompt = component_prompt(component)
-        key = fingerprint(self.system, MODEL, prompt)
-        cached = self.cache.get(key)
+        cached = self.cache.get(component.reference)
         if cached is not None:
-            try:
-                selection = Selection.model_validate(cached)
-            except ValidationError:
-                pass
-            else:
-                self.usage.record("classification", component.reference, MODEL)
-                return selection
+            for choice, candidate in enumerate(self.tree.candidates):
+                if candidate.htsno == cached["htsno"]:
+                    selection = Selection(choice=choice, evidence=cached["evidence"])
+                    if resolve(component, selection, self.tree.candidates).code is not None:
+                        self.usage.record("classification", component.reference, MODEL)
+                        return selection
+                    break
+        prompt = component_prompt(component)
         response = self.usage.request(
             self.client.responses.parse, "classification", component.reference,
             model=MODEL,
@@ -83,13 +82,13 @@ class Classifier:
         if response.status != "completed" or response.output_parsed is None:
             raise RuntimeError(f"{component.reference}: no complete classification")
         selection = response.output_parsed
-        self.cache.put(key, selection.model_dump())
+        classification = resolve(component, selection, self.tree.candidates)
+        if classification.code is not None:
+            self.cache.put(component.reference, classification.code, classification.evidence)
         return selection
 
     def run(self, components: list[Component]) -> list[Classification]:
-        rows = [resolve(c, self.select(c), self.tree.candidates) for c in components]
-        self.cache.save()
-        return rows
+        return [resolve(c, self.select(c), self.tree.candidates) for c in components]
 
 
 def write_classified(rows: list[Classification], path: str | Path) -> None:

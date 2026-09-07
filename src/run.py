@@ -7,7 +7,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from src.classify.cache import SelectionCache
+from src.classify.cache import ClassificationCache
 from src.classify.classifier import MODEL, MAX_OUTPUT_TOKENS, Classifier, write_classified
 from src.bom.flatten import Bom, write_components
 from src.brief import build_brief_data
@@ -73,7 +73,7 @@ class BomAnalysis:
         self.index = HtsIndex.load(HTS_JSON)
         self.classifier = Classifier(
             render(self.index),
-            SelectionCache.load(self.out_dir / "selection_cache.json"), client,
+            ClassificationCache(), client,
             usage=usage,
         )
         self.classifications = None

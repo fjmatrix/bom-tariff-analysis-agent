@@ -1,13 +1,14 @@
 """Validate HTS selections and cache reuse without live model calls."""
 
-import json
+import sqlite3
+from contextlib import closing
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
-from src.classify.cache import SelectionCache, fingerprint
+from src.classify.cache import ClassificationCache
 from src.classify.classifier import MODEL, Classifier, Selection, resolve
-from src.classify.prompts import component_prompt
 from src.bom.flatten import Component
 from src.config import HTS_JSON
 from src.hts.index import HtsIndex
@@ -51,80 +52,132 @@ def test_invalid_and_abstained_selections_have_no_usable_code(
 class StubClient:
     """Counts calls so a cache hit is observable rather than assumed."""
 
-    def __init__(self):
+    def __init__(self, tree):
         self.responses = self
         self.requests = []
+        choice = next(i for i, r in enumerate(tree.candidates) if r.htsno == "7318.16.00.60")
+        self.selection = Selection(choice=choice, evidence="Nuts")
 
     def parse(self, **kwargs):
         self.requests.append(kwargs)
         return SimpleNamespace(
-            status="completed", output_parsed=Selection(choice=0, evidence="Coach screws"),
+            status="completed", output_parsed=self.selection,
         )
 
 
-def test_disk_cache_and_changed_description(component, tree, tmp_path):
-    client = StubClient()
-    path = tmp_path / "cache.json"
-    Classifier(tree, SelectionCache(path), client).run([component])
-    classifier = Classifier(tree, SelectionCache.load(path), client)
+def test_disk_cache_reuses_reference_after_description_change(component, tree, tmp_path):
+    client = StubClient(tree)
+    path = tmp_path / "nested/cache.sqlite3"
+    first = Classifier(tree, ClassificationCache(path), client).run([component])[0]
+    classifier = Classifier(tree, ClassificationCache(path), client)
     classifier.run([component])
     assert len(client.requests) == 1
 
     component.name = "Stainless steel coach screw"
-    classifier.run([component])
-    assert len(client.requests) == 2
-    request = client.requests[-1]
+    result = classifier.run([component])[0]
+    assert len(client.requests) == 1
+    assert result.name == component.name
+    assert result.code == first.code
+    assert classifier.usage.report()["totals"]["cache_hits"] == 2
+    request = client.requests[0]
     assert request["model"] == MODEL
     assert request["instructions"] == classifier.system
     assert request["text_format"] is Selection
     assert tree.text not in request["input"][0]["content"]
 
 
-def test_prompt_change_invalidates_old_schema_cache(component, tree, tmp_path):
-    client = StubClient()
-    cache = SelectionCache(tmp_path / "cache.json")
-    cache.put("legacy-prompt", {
-        "choice": 0, "evidence": "Coach screws", "confidence": 0.9,
-    })
-    classifier = Classifier(tree, cache, client)
+def test_prompt_and_model_changes_reuse_cache(component, tree, tmp_path, monkeypatch):
+    client = StubClient(tree)
+    classifier = Classifier(tree, ClassificationCache(tmp_path / "cache.sqlite3"), client)
     classifier.run([component])
     classifier.system += "\nChanged classification instructions"
-    classifier.run([component])
-    assert len(client.requests) == 2
-
-
-def test_model_change_invalidates_cache(component, tree, tmp_path, monkeypatch):
-    client = StubClient()
-    classifier = Classifier(tree, SelectionCache(tmp_path / "cache.json"), client)
-    classifier.run([component])
     monkeypatch.setattr("src.classify.classifier.MODEL", "another-model")
     classifier.run([component])
-    assert len(client.requests) == 2
+    assert len(client.requests) == 1
 
 
-@pytest.mark.parametrize("contents", [
-    "{truncated", "[]", "null",
-    json.dumps({"X1": {"fingerprint": "legacy", "selection": {"choice": 0}}}),
+def test_reordered_candidates_reuse_hts_number(component, tree, tmp_path):
+    client = StubClient(tree)
+    cache = ClassificationCache(tmp_path / "cache.sqlite3")
+    first = Classifier(tree, cache, client).run([component])[0]
+    reordered = replace(tree, candidates=list(reversed(tree.candidates)))
+    result = Classifier(reordered, cache, client).run([component])[0]
+    assert result == first
+    assert len(client.requests) == 1
+
+
+@pytest.mark.parametrize("htsno,evidence", [
+    ("missing-code", "Coach screws"),
+    ("7318.16.00.60", "invented rationale"),
+    ("7318.16.00.60", ""),
 ])
-def test_unusable_or_legacy_cache_is_refreshed(component, tree, tmp_path, contents):
-    path = tmp_path / "cache.json"
-    path.write_text(contents)
-    client = StubClient()
-    classifier = Classifier(tree, SelectionCache.load(path), client)
-    classifier.run([component])
-    Classifier(tree, SelectionCache.load(path), client).run([component])
-    assert len(client.requests) == 1
-
-
-def test_invalid_cached_selection_is_refreshed(component, tree, tmp_path):
-    client = StubClient()
-    cache = SelectionCache(tmp_path / "cache.json")
+def test_unsupported_cached_classification_is_refreshed(
+    component, tree, tmp_path, htsno, evidence,
+):
+    client = StubClient(tree)
+    cache = ClassificationCache(tmp_path / "cache.sqlite3")
+    cache.put(component.reference, htsno, evidence)
     classifier = Classifier(tree, cache, client)
-    key = fingerprint(classifier.system, MODEL, component_prompt(component))
-    cache.put(key, {"choice": "invalid"})
+    result = classifier.run([component])[0]
     classifier.run([component])
     assert len(client.requests) == 1
-    assert cache.get(key) == {"choice": 0, "evidence": "Coach screws"}
+    assert cache.get(component.reference) == {
+        "reference": component.reference, "htsno": result.code, "evidence": "Nuts",
+    }
+
+
+def test_cache_writes_are_shared_and_only_store_classification_fields(tmp_path):
+    path = tmp_path / "cache.sqlite3"
+    first = ClassificationCache(path)
+    second = ClassificationCache(path)
+    first.put("X'1", "7318.11.00.00", "Coach screws")
+    second.put("X2", "7318.16.00.60", "Nuts")
+    second.put("X'1", "7318.16.00.60", "Nuts")
+    assert first.get("X'1") == {
+        "reference": "X'1", "htsno": "7318.16.00.60", "evidence": "Nuts",
+    }
+    assert first.get("X2") == second.get("X2")
+    assert first.get("missing") is None
+    with closing(sqlite3.connect(path)) as connection:
+        columns = connection.execute("PRAGMA table_info(classifications)").fetchall()
+        assert [column[1] for column in columns] == ["reference", "htsno", "evidence"]
+        assert connection.execute("SELECT COUNT(*) FROM classifications").fetchone()[0] == 2
+
+
+@pytest.mark.parametrize("choice,evidence", [
+    (None, "No supported candidate"),
+    (-1, "Other"),
+    (0, "invented rationale"),
+])
+def test_unresolved_classification_is_not_cached(component, tree, tmp_path, choice, evidence):
+    client = SimpleNamespace(responses=SimpleNamespace(
+        parse=lambda **kwargs: SimpleNamespace(
+            status="completed", output_parsed=Selection(choice=choice, evidence=evidence),
+        ),
+    ))
+    cache = ClassificationCache(tmp_path / "cache.sqlite3")
+    result = Classifier(tree, cache, client).run([component])[0]
+    assert result.code is None
+    assert cache.get(component.reference) is None
+
+
+def test_completed_classification_survives_later_failure(component, tree, tmp_path):
+    path = tmp_path / "cache.sqlite3"
+    client = StubClient(tree)
+    parse = client.parse
+
+    def fail_second(**kwargs):
+        if client.requests:
+            raise RuntimeError("provider unavailable")
+        return parse(**kwargs)
+
+    client.parse = fail_second
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        Classifier(tree, ClassificationCache(path), client).run([
+            component, replace(component, reference="X2"),
+        ])
+    assert ClassificationCache(path).get(component.reference)["htsno"] == "7318.16.00.60"
+    assert ClassificationCache(path).get("X2") is None
 
 
 @pytest.mark.parametrize("status,selection", [
@@ -137,7 +190,7 @@ def test_missing_or_incomplete_answer_is_not_cached(
     client = SimpleNamespace(responses=SimpleNamespace(
         parse=lambda **kwargs: SimpleNamespace(status=status, output_parsed=selection),
     ))
-    cache = SelectionCache(tmp_path / "cache.json")
+    cache = ClassificationCache(tmp_path / "cache.sqlite3")
     with pytest.raises(RuntimeError, match="no complete classification"):
         Classifier(tree, cache, client).run([component])
-    assert cache.entries == {}
+    assert cache.get(component.reference) is None
