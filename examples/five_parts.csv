@@ -1,0 +1,6 @@
+level,component_reference,component_name,component_quantity,parent_bom_reference,parent_bom_name,has_child_bom,unit_price_usd,country_of_origin
+0,M00653,EVO-M [M0 use],1.00,,,True,1348.83,BE
+1,M00206,EVO-M - Main Box 1/2,1.00,M00653,EVO-M [M0 use],True,1157.83,BE
+2,M00148,EVO - Control Unit,1.00,M00206,EVO-M - Main Box 1/2,True,494.26,BE
+3,M00218,CNC Evo/Pro - Steel Parts - Control Unit Base,1.00,M00148,EVO - Control Unit,False,18.00,BE
+3,M00219,CNC Evo/Pro - Steel Parts - Control Unit Cover,1.00,M00148,EVO - Control Unit,False,16.00,BE

@@ -5,7 +5,8 @@ description = "BOM tariff exposure: roll-up, HTS classification via LLM select, 
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.7",
-    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+    "openai>=3.0",
     "httpx>=0.27",
     "pandas>=2.2",
 ]

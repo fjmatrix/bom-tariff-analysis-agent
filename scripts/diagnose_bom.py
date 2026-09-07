@@ -2,7 +2,7 @@
 
 These do not run in the pipeline. They detect nothing that Bom.reconcile()
 misses in practice -- their value is *localization*: reconciliation says the
-BOM is off by EUR 387, this says which seven subassemblies caused it. That is
+BOM is off by USD 387, this says which seven subassemblies caused it. That is
 how the quantity convention was found in the first place.
 
     .venv/bin/python -m scripts.diagnose_bom
@@ -66,11 +66,11 @@ def check_cost_invariant(bom: Bom) -> list[str]:
         if not kids:
             out.append(f"line {row.line} ({row.reference}): has_child_bom=True, no child rows")
             continue
-        total = sum(k.extended_cost_eur for k in kids)
-        if abs(total - row.extended_cost_eur) > CENT:
+        total = sum(k.extended_cost_usd for k in kids)
+        if abs(total - row.extended_cost_usd) > CENT:
             out.append(
                 f"line {row.line} ({row.reference}, qty {row.quantity:g}): extended "
-                f"{row.extended_cost_eur:.2f} != sum(children) {total:.2f}"
+                f"{row.extended_cost_usd:.2f} != sum(children) {total:.2f}"
             )
     return out
 
@@ -84,8 +84,8 @@ CHECKS = {
 
 def main() -> None:
     bom = Bom.load(BOM_CSV)
-    leaf_total = sum(r.extended_cost_eur for r in bom.leaves)
-    print(f"leaves {len(bom.leaves)}  sum EUR {leaf_total:,.2f}  root EUR {bom.root.extended_cost_eur:,.2f}\n")
+    leaf_total = sum(r.extended_cost_usd for r in bom.leaves)
+    print(f"leaves {len(bom.leaves)}  sum USD {leaf_total:,.2f}  root USD {bom.root.extended_cost_usd:,.2f}\n")
 
     for name, check in CHECKS.items():
         problems = check(bom)
