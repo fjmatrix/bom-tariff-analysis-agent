@@ -1,29 +1,13 @@
-"""Disk cache of the model's answer, keyed by component_reference.
-
-What is cached is the *selection*, not the classification. The branch logic in
-`loop.py` re-runs on every replay, so changing how Python treats an answer --
-now validation and code resolution -- costs nothing and calls nothing.
-Changing the prompt does not get that treatment: the model
-returns an integer whose meaning is fixed by the tree it read, so a cached
-`choice: 25` from a different tree points at a different code.
-
-`fingerprint` is that guard. It covers the system prompt (which contains the
-tree) and the model id, so swapping htsdata.json, reordering candidates or
-switching models invalidates rather than silently mis-resolves.
-
-The classifier also includes the component prompt in the stored fingerprint,
-so an uploaded BOM with a changed description or assembly context is refreshed.
-"""
-
-from __future__ import annotations
+"""Cache structured selections by the model and complete classification prompts."""
 
 import hashlib
 import json
 from pathlib import Path
 
 
-def fingerprint(system: str, model: str) -> str:
-    return hashlib.sha256(f"{model}\n{system}".encode()).hexdigest()[:16]
+def fingerprint(system: str, model: str, prompt: str) -> str:
+    request = json.dumps([model, system, prompt], ensure_ascii=False)
+    return hashlib.sha256(request.encode()).hexdigest()
 
 
 class SelectionCache:
@@ -34,20 +18,24 @@ class SelectionCache:
     @classmethod
     def load(cls, path: str | Path) -> "SelectionCache":
         cache = cls(path)
-        if cache.path.exists():
-            cache.entries = json.loads(cache.path.read_text())
+        try:
+            entries = json.loads(cache.path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError):
+            return cache
+        if isinstance(entries, dict):
+            cache.entries = entries
         return cache
 
-    def get(self, reference: str, fingerprint: str) -> dict | None:
-        entry = self.entries.get(reference)
-        if entry is None or entry["fingerprint"] != fingerprint:
-            return None
-        return entry["selection"]
+    def get(self, key: str) -> dict | None:
+        selection = self.entries.get(key)
+        return selection if isinstance(selection, dict) else None
 
-    def put(self, reference: str, fingerprint: str, selection: dict) -> None:
-        self.entries[reference] = {"fingerprint": fingerprint, "selection": selection}
+    def put(self, key: str, selection: dict) -> None:
+        self.entries[key] = selection
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "w") as fh:
-            json.dump(self.entries, fh, indent=2, sort_keys=True)
+        self.path.write_text(
+            json.dumps(self.entries, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )

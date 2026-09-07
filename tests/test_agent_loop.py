@@ -1,11 +1,13 @@
 """Validate HTS selections and cache reuse without live model calls."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
 
-from src.classify.cache import SelectionCache
+from src.classify.cache import SelectionCache, fingerprint
 from src.classify.classifier import MODEL, Classifier, Selection, resolve
+from src.classify.prompts import component_prompt
 from src.bom.flatten import Component
 from src.config import HTS_JSON
 from src.hts.index import HtsIndex
@@ -81,7 +83,7 @@ def test_disk_cache_and_changed_description(component, tree, tmp_path):
 def test_prompt_change_invalidates_old_schema_cache(component, tree, tmp_path):
     client = StubClient()
     cache = SelectionCache(tmp_path / "cache.json")
-    cache.put(component.reference, "legacy-prompt", {
+    cache.put("legacy-prompt", {
         "choice": 0, "evidence": "Coach screws", "confidence": 0.9,
     })
     classifier = Classifier(tree, cache, client)
@@ -89,6 +91,40 @@ def test_prompt_change_invalidates_old_schema_cache(component, tree, tmp_path):
     classifier.system += "\nChanged classification instructions"
     classifier.run([component])
     assert len(client.requests) == 2
+
+
+def test_model_change_invalidates_cache(component, tree, tmp_path, monkeypatch):
+    client = StubClient()
+    classifier = Classifier(tree, SelectionCache(tmp_path / "cache.json"), client)
+    classifier.run([component])
+    monkeypatch.setattr("src.classify.classifier.MODEL", "another-model")
+    classifier.run([component])
+    assert len(client.requests) == 2
+
+
+@pytest.mark.parametrize("contents", [
+    "{truncated", "[]", "null",
+    json.dumps({"X1": {"fingerprint": "legacy", "selection": {"choice": 0}}}),
+])
+def test_unusable_or_legacy_cache_is_refreshed(component, tree, tmp_path, contents):
+    path = tmp_path / "cache.json"
+    path.write_text(contents)
+    client = StubClient()
+    classifier = Classifier(tree, SelectionCache.load(path), client)
+    classifier.run([component])
+    Classifier(tree, SelectionCache.load(path), client).run([component])
+    assert len(client.requests) == 1
+
+
+def test_invalid_cached_selection_is_refreshed(component, tree, tmp_path):
+    client = StubClient()
+    cache = SelectionCache(tmp_path / "cache.json")
+    classifier = Classifier(tree, cache, client)
+    key = fingerprint(classifier.system, MODEL, component_prompt(component))
+    cache.put(key, {"choice": "invalid"})
+    classifier.run([component])
+    assert len(client.requests) == 1
+    assert cache.get(key) == {"choice": 0, "evidence": "Coach screws"}
 
 
 @pytest.mark.parametrize("status,selection", [

@@ -4,7 +4,7 @@ import csv
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from src.classify.cache import SelectionCache, fingerprint
 from src.classify.prompts import component_prompt, system_prompt
@@ -60,10 +60,13 @@ class Classifier:
 
     def select(self, component: Component) -> Selection:
         prompt = component_prompt(component)
-        key = fingerprint(f"{self.system}\n{prompt}", MODEL)
-        cached = self.cache.get(component.reference, key)
+        key = fingerprint(self.system, MODEL, prompt)
+        cached = self.cache.get(key)
         if cached is not None:
-            return Selection.model_validate(cached)
+            try:
+                return Selection.model_validate(cached)
+            except ValidationError:
+                pass
         response = self.client.responses.parse(
             model=MODEL,
             max_output_tokens=MAX_OUTPUT_TOKENS,
@@ -74,7 +77,7 @@ class Classifier:
         if response.status != "completed" or response.output_parsed is None:
             raise RuntimeError(f"{component.reference}: no complete classification")
         selection = response.output_parsed
-        self.cache.put(component.reference, key, selection.model_dump())
+        self.cache.put(key, selection.model_dump())
         return selection
 
     def run(self, components: list[Component]) -> list[Classification]:

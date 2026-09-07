@@ -1,4 +1,4 @@
-import csv
+import json
 from datetime import date
 from unittest.mock import patch
 
@@ -56,8 +56,8 @@ def test_report_request_sums_partial_years_and_ranks_countries(monkeypatch):
             {"Canada": "CA", "China": "CN", "Japan": "JP"},
         )
     assert result == [
-        {"country": "CN", "country_name": "China", "customs_value_usd": 2000},
-        {"country": "CA", "country_name": "Canada", "customs_value_usd": 1600},
+        {"country": "CN", "customs_value_usd": 2000},
+        {"country": "CA", "customs_value_usd": 1600},
     ]
     request = post.call_args.kwargs
     assert request["headers"]["Authorization"] == "Bearer test-token"
@@ -124,8 +124,8 @@ def test_unmapped_country_and_suppressed_value_fail_explicitly(monkeypatch, rows
 def test_discovery_deduplicates_codes_limits_each_ranking_and_keeps_errors():
     values = {
         "7318160060": [
-            {"country": "CN", "country_name": "China", "customs_value_usd": 20},
-            {"country": "CA", "country_name": "Canada", "customs_value_usd": 10},
+            {"country": "CN", "customs_value_usd": 20},
+            {"country": "CA", "customs_value_usd": 10},
         ],
     }
 
@@ -142,44 +142,49 @@ def test_discovery_deduplicates_codes_limits_each_ranking_and_keeps_errors():
             date(2026, 9, 7),
         )
     assert get.call_count == 2
-    assert result["period_start"] == "09/2025"
-    assert result["period_end"] == "08/2026"
-    assert result["rankings"] == [{
-        "hts_code": "7318160060",
-        "countries": [values["7318160060"][0]],
-    }]
-    assert result["errors"] == [{"hts_code": "7318210030", "error": "no rows"}]
+    assert result == {
+        "7318160060": {
+            "period_start": "09/2025", "period_end": "08/2026",
+            "countries": {"CN": {"customs_value_usd": 20}},
+        },
+        "7318210030": {
+            "period_start": "09/2025", "period_end": "08/2026",
+            "countries": {}, "error": "no rows",
+        },
+    }
 
 
 def test_no_classified_codes_skip_dataweb():
     with patch("src.duty.dataweb._country_codes") as countries:
         result = discover_top_import_countries([], 5, date(2026, 9, 7))
     countries.assert_not_called()
-    assert result["rankings"] == []
-    assert result["errors"] == []
+    assert result == {}
 
 
-def test_country_rankings_csv(tmp_path):
+def test_country_mapping_failure_preserves_per_code_errors():
+    with patch("src.duty.dataweb._country_codes", side_effect=ValueError("unavailable")), \
+         patch("src.duty.dataweb.get_imports_by_country") as get:
+        result = discover_top_import_countries(["7318.21.00", "7318.16.00"], 5)
+    get.assert_not_called()
+    assert set(result) == {"73182100", "73181600"}
+    assert all(row["countries"] == {} and row["error"] == "unavailable" for row in result.values())
+
+
+def test_country_rankings_jsonl_preserves_values_period_and_errors(tmp_path):
     result = {
-        "period_start": "09/2025",
-        "period_end": "08/2026",
-        "rankings": [{
-            "hts_code": "7318210030",
-            "countries": [{
-                "country": "DE", "country_name": "Germany",
-                "customs_value_usd": 123,
-            }],
-        }],
+        "7318210030": {
+            "period_start": "09/2025", "period_end": "08/2026",
+            "countries": {"DE": {"customs_value_usd": 123}},
+        },
+        "7318160060": {
+            "period_start": "09/2025", "period_end": "08/2026",
+            "countries": {}, "error": "unavailable",
+        },
     }
-    path = tmp_path / "trade_countries.csv"
+    path = tmp_path / "nested/trade_countries.jsonl"
     write_country_rankings(result, path)
-    with path.open(newline="") as fh:
-        assert list(csv.DictReader(fh)) == [{
-            "hts_code": "7318210030",
-            "rank": "1",
-            "country": "DE",
-            "country_name": "Germany",
-            "customs_value_usd": "123",
-            "period_start": "09/2025",
-            "period_end": "08/2026",
-        }]
+    assert [json.loads(line) for line in path.read_text().splitlines()] == [
+        {code: ranking} for code, ranking in result.items()
+    ]
+    write_country_rankings({}, path)
+    assert path.read_text() == ""

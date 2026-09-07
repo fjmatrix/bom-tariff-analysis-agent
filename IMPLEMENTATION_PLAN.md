@@ -27,7 +27,8 @@ not support a candidate. Python checks the candidate index and evidence.
 
 The classifier keeps caching and CSV output. Legacy runner-up logic, confidence
 fallbacks, rate-based ambiguity suppression, and the separate audit/CLI flow
-have been removed. The revised prompt invalidates old cached selections.
+have been removed. Selections are cached by a hash of the model and full classification prompts;
+legacy and malformed entries are refreshed on demand.
 
 ## HTS country rates
 
@@ -50,20 +51,24 @@ The current origin is always included even when it falls outside the ranking.
 The rolling window is expressed as an exact start and end month. DataWeb returns
 one customs-value column per partial year when the window crosses New Year; the
 workflow sums those columns, maps DataWeb country names to ISO-2 codes using its
-country endpoint, and writes `trade_countries.csv`. Per-code request failures are
+country endpoint, and writes `trade_countries.jsonl`. Per-code request failures are
 recorded and leave that code with a current-origin scenario only.
 
 ## Outputs and verification
 
-Outputs: `brief.md`, `scenarios.csv`, `trade_countries.csv`, `components.csv`,
-`classified.csv`, and `selection_cache.json`. The scenario CSV retains exactly
-`reference,country,duty_eur,savings_eur`.
+Outputs: `brief.md`, `scenarios.jsonl`, `trade_countries.jsonl`, `components.csv`,
+`classified.csv`, and `selection_cache.json`. Scenario objects are keyed by part
+reference and contain the current origin and country-keyed duty/savings in USD.
+Country ranking objects are keyed by HTS code, with the period and country-keyed
+customs values. Each JSONL line contains one top-level entry. Unresolved reasons
+and lookup errors stay on the affected entries; scenario totals and duplicate
+trade metadata are omitted.
 
-The bundled two-part demo has €0.58 current-origin duty. Alternative results
+The bundled two-part demo has $0.58 current-origin duty. Alternative results
 depend on the rolling country ranking. These are Column 1 snapshot calculations,
 with unchanged purchase values and separately imported components.
 
 Focused tests cover the agent conversation and recovery, classification and
 cache invalidation, HTS inheritance and special-rate selection, exclusions,
-rounding, and per-part best savings. They use model stubs and make no live API
+rounding, and per-part origin savings. They use model stubs and make no live API
 calls. Run commands and limitations are documented in README.md.

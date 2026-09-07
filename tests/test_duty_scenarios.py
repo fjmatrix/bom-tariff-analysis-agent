@@ -1,6 +1,6 @@
 """Hand-calculated HTS country comparisons; no model calls."""
 
-import csv
+import json
 from dataclasses import replace
 
 import pytest
@@ -27,25 +27,28 @@ def demo():
     }
 
 
-def test_two_parts_four_rows_and_hand_calculated_totals(demo, tmp_path):
+def test_two_parts_group_countries_and_round_to_cents(demo, tmp_path):
     result = calculate_duty_scenarios(*demo)
-    assert result["rows"] == [
-        {"reference": "DEMO-NUT", "country": "CA", "duty_eur": 0.0, "savings_eur": 0.0},
-        {"reference": "DEMO-NUT", "country": "CN", "duty_eur": 0.0, "savings_eur": 0.0},
-        {"reference": "DEMO-WASHER", "country": "CA", "duty_eur": 0.0, "savings_eur": 0.58},
-        {"reference": "DEMO-WASHER", "country": "CN", "duty_eur": 0.58, "savings_eur": 0.0},
-    ]
-    assert result["current_duty_eur"] == 0.58
-    assert result["best_savings_eur"] == 0.58
-    assert result["duty_after_best_savings_eur"] == 0
-    assert result["calculated_parts"] == result["total_parts"] == 2
-    assert result["unresolved"] == []
-    path = tmp_path / "scenarios.csv"
-    write_scenarios(result["rows"], path)
-    with path.open(newline="") as fh:
-        rows = list(csv.DictReader(fh))
-    assert list(rows[0]) == ["reference", "country", "duty_eur", "savings_eur"]
-    assert rows[-1]["duty_eur"] == "0.58"
+    assert result == {
+        "DEMO-NUT": {
+            "country_of_origin": "CN",
+            "countries": {
+                "CA": {"duty_usd": 0.0, "savings_usd": 0.0},
+                "CN": {"duty_usd": 0.0, "savings_usd": 0.0},
+            },
+        },
+        "DEMO-WASHER": {
+            "country_of_origin": "CN",
+            "countries": {
+                "CA": {"duty_usd": 0.0, "savings_usd": 0.58},
+                "CN": {"duty_usd": 0.58, "savings_usd": 0.0},
+            },
+        },
+    }
+    path = tmp_path / "nested/scenarios.jsonl"
+    write_scenarios(result, path)
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert lines == [{reference: scenario} for reference, scenario in result.items()]
 
 
 @pytest.mark.parametrize("country,rate", [
@@ -82,14 +85,13 @@ def test_general_free_with_no_special_is_zero(demo):
     assert duty_rate(demo[2].get("7318.16.00.60"), "CA") == 0
 
 
-def test_multiple_alternatives_do_not_double_count_savings(demo):
+def test_multiple_alternatives_compare_with_current_origin(demo):
     components, classifications, index, _ = demo
     countries = {row.code: ["CA", "MX", "JP"] for row in classifications}
     result = calculate_duty_scenarios(components, classifications, index, countries)
-    assert result["best_savings_eur"] == 0.58
-    assert len(result["best_alternatives"]) == 1
-    japan = next(r for r in result["rows"] if r["reference"] == "DEMO-WASHER" and r["country"] == "JP")
-    assert japan["duty_eur"] == 0.29
+    washer = result["DEMO-WASHER"]["countries"]
+    assert washer["CA"]["savings_usd"] == washer["MX"]["savings_usd"] == 0.58
+    assert washer["JP"] == {"duty_usd": 0.29, "savings_usd": 0.29}
 
 
 def test_baselines_follow_each_parts_origin_and_keep_negative_savings(demo):
@@ -97,22 +99,28 @@ def test_baselines_follow_each_parts_origin_and_keep_negative_savings(demo):
     components[1].country_of_origin = "JP"
     countries = {row.code: ["CN", "CA"] for row in classifications}
     result = calculate_duty_scenarios(components, classifications, index, countries)
-    assert result["current_duty_eur"] == 0.29
-    china = next(r for r in result["rows"] if r["reference"] == "DEMO-WASHER" and r["country"] == "CN")
-    assert china["savings_eur"] == -0.29
-    assert result["best_savings_eur"] == 0.29
+    washer = result["DEMO-WASHER"]
+    assert washer["country_of_origin"] == "JP"
+    assert washer["countries"]["JP"] == {"duty_usd": 0.29, "savings_usd": 0.0}
+    assert washer["countries"]["CN"]["savings_usd"] == -0.29
+    assert washer["countries"]["CA"]["savings_usd"] == 0.29
 
 
-def test_unclassified_and_unsupported_baseline_are_excluded(demo):
+def test_unclassified_and_unsupported_baseline_have_reasons(demo, tmp_path):
     components, classifications, index, countries = demo
     classifications[0] = replace(classifications[0], status="needs_review", reason="test_review")
     index.get(classifications[1].code).general = "2 cents/kg"
     result = calculate_duty_scenarios(components, classifications, index, countries)
-    assert result["rows"] == []
-    assert result["calculated_parts"] == 0
-    assert result["unresolved"] == [
-        {"reference": "DEMO-NUT", "reason": "test_review"},
-        {"reference": "DEMO-WASHER", "reason": "unsupported_current_origin_rate"},
+    assert result == {
+        "DEMO-NUT": {"country_of_origin": "CN", "reason": "test_review"},
+        "DEMO-WASHER": {
+            "country_of_origin": "CN", "reason": "unsupported_current_origin_rate",
+        },
+    }
+    path = tmp_path / "scenarios.jsonl"
+    write_scenarios(result, path)
+    assert [json.loads(line) for line in path.read_text().splitlines()] == [
+        {reference: scenario} for reference, scenario in result.items()
     ]
 
 
@@ -120,28 +128,42 @@ def test_unsupported_alternative_keeps_supported_baseline(demo):
     components, classifications, index, countries = demo
     index.get(classifications[1].code).special = "2 cents/kg (S)"
     result = calculate_duty_scenarios(components, classifications, index, countries)
-    assert result["current_duty_eur"] == 0.58
-    assert result["best_savings_eur"] == 0
-    assert result["unresolved"] == [{
-        "reference": "DEMO-WASHER", "country": "CA", "reason": "unsupported_alternative_rate",
-    }]
+    washer = result["DEMO-WASHER"]["countries"]
+    assert washer["CN"] == {"duty_usd": 0.58, "savings_usd": 0.0}
+    assert washer["CA"] == {"reason": "unsupported_alternative_rate"}
 
 
 def test_country_normalization_deduplication_and_current_only(demo):
     components, classifications, index, _ = demo
-    countries = {row.code: [" ca ", "CA", "CN"] for row in classifications}
+    countries = {row.code.replace(".", ""): [" ca ", "CA", "CN"] for row in classifications}
     result = calculate_duty_scenarios(components, classifications, index, countries)
-    assert len(result["rows"]) == 4
+    assert all(set(part["countries"]) == {"CA", "CN"} for part in result.values())
     result = calculate_duty_scenarios(components, classifications, index, {})
-    assert len(result["rows"]) == 2
-    assert result["best_savings_eur"] == 0
+    assert all(set(part["countries"]) == {"CN"} for part in result.values())
+    assert all(part["countries"]["CN"]["savings_usd"] == 0 for part in result.values())
 
 
 def test_missing_origin_is_not_treated_as_general(demo):
     demo[0][1].country_of_origin = ""
     result = calculate_duty_scenarios(*demo)
-    assert result["calculated_parts"] == 1
-    assert result["unresolved"][0]["reason"] == "missing_or_invalid_origin"
+    assert "countries" in result["DEMO-NUT"]
+    assert result["DEMO-WASHER"]["reason"] == "missing_or_invalid_origin"
+
+
+def test_missing_classification_and_unknown_code(demo):
+    components, classifications, index, countries = demo
+    classifications = [replace(classifications[1], code="0000.00.00")]
+    result = calculate_duty_scenarios(components, classifications, index, countries)
+    assert result["DEMO-NUT"]["reason"] == "not_classified"
+    assert result["DEMO-WASHER"]["reason"] == "unknown_hts_code"
+
+
+def test_empty_scenarios_write_empty_file(demo, tmp_path):
+    result = calculate_duty_scenarios([], [], demo[2], {})
+    assert result == {}
+    path = tmp_path / "scenarios.jsonl"
+    write_scenarios(result, path)
+    assert path.read_text() == ""
 
 
 def test_invalid_scenario_country_is_rejected(demo):

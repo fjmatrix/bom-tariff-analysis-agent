@@ -3,13 +3,13 @@
 The one thing to get right: `component_quantity` is ALREADY ABSOLUTE. It counts
 pieces per finished product, not per parent unit. The seven subassemblies with
 qty > 1 have children whose quantities are already multiplied through -- M00696
-(Nema23 Motor) is EUR 28.63 at qty 4, and its children sum to EUR 114.52.
+(Nema23 Motor) is USD 28.63 at qty 4, and its children sum to USD 114.52.
 
 Propagating ancestor multipliers double-counts those subtrees and inflates the
-BOM from EUR 1,348.83 to EUR 1,735.99. So:
+BOM from USD 1,348.83 to USD 1,735.99. So:
 
     effective_qty     = component_quantity
-    extended_cost_eur = component_quantity * unit_price_eur
+    extended_cost_usd = component_quantity * unit_price_usd
 
 The invariant that holds everywhere, and the one worth asserting, is that a
 parent's extended cost equals the sum of its children's extended costs. Leaf
@@ -25,7 +25,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CENT = 0.005  # reconciliation tolerance, EUR
+CENT = 0.005  # reconciliation tolerance, USD
 
 
 @dataclass
@@ -37,14 +37,14 @@ class BomRow:
     quantity: float
     parent_reference: str
     has_child_bom: bool
-    unit_price_eur: float
+    unit_price_usd: float
     parent_line: int | None = None
     assembly_path: tuple[str, ...] = ()
     country_of_origin: str = ""
 
     @property
-    def extended_cost_eur(self) -> float:
-        return self.quantity * self.unit_price_eur
+    def extended_cost_usd(self) -> float:
+        return self.quantity * self.unit_price_usd
 
 
 @dataclass
@@ -54,14 +54,14 @@ class Component:
     reference: str
     name: str
     quantity: float
-    unit_price_eur: float
+    unit_price_usd: float
     occurrences: int
     assembly_paths: list[tuple[str, ...]] = field(default_factory=list)
     country_of_origin: str = ""
 
     @property
-    def extended_cost_eur(self) -> float:
-        return self.quantity * self.unit_price_eur
+    def extended_cost_usd(self) -> float:
+        return self.quantity * self.unit_price_usd
 
     @property
     def context(self) -> str:
@@ -98,7 +98,7 @@ class Bom:
                     quantity=float(raw["component_quantity"]),
                     parent_reference=raw["parent_bom_reference"].strip(),
                     has_child_bom=raw["has_child_bom"].strip() == "True",
-                    unit_price_eur=float(raw["unit_price_eur"]),
+                    unit_price_usd=float(raw["unit_price_usd"]),
                     country_of_origin=raw.get("country_of_origin", "").strip().upper(),
                 )
                 for lvl in [k for k in stack if k >= level]:
@@ -134,8 +134,8 @@ class Bom:
         is wrong by 29% and this is what says so. Everything else that used to
         live here was forensic, not preventive -- see scripts/diagnose_bom.py.
         """
-        leaf_total = sum(r.extended_cost_eur for r in self.leaves)
-        root_total = self.root.extended_cost_eur
+        leaf_total = sum(r.extended_cost_usd for r in self.leaves)
+        root_total = self.root.extended_cost_usd
         if abs(leaf_total - root_total) > CENT:
             raise ValidationError(
                 f"leaf sum {leaf_total:,.2f} != root {root_total:,.2f} "
@@ -146,7 +146,7 @@ class Bom:
             "rows": len(self.rows),
             "leaves": len(self.leaves),
             "subassemblies": sum(1 for r in self.rows if r.has_child_bom),
-            "total_eur": round(leaf_total, 2),
+            "total_usd": round(leaf_total, 2),
         }
 
     # -- roll-up -------------------------------------------------------------
@@ -164,7 +164,7 @@ class Bom:
 
         out: list[Component] = []
         for reference, rows in grouped.items():
-            prices = {round(r.unit_price_eur, 6) for r in rows}
+            prices = {round(r.unit_price_usd, 6) for r in rows}
             if len(prices) > 1:
                 raise ValidationError(
                     f"{reference}: inconsistent unit price across occurrences {sorted(prices)}"
@@ -179,14 +179,14 @@ class Bom:
                     reference=reference,
                     name=rows[0].name,
                     quantity=sum(r.quantity for r in rows),
-                    unit_price_eur=rows[0].unit_price_eur,
+                    unit_price_usd=rows[0].unit_price_usd,
                     occurrences=len(rows),
                     assembly_paths=[r.assembly_path for r in rows],
                     country_of_origin=rows[0].country_of_origin,
                 )
             )
         self.reconcile()
-        out.sort(key=lambda c: c.extended_cost_eur, reverse=True)
+        out.sort(key=lambda c: c.extended_cost_usd, reverse=True)
         return out
 
 
@@ -199,8 +199,8 @@ def write_components(components: list[Component], path: str | Path) -> None:
                 "component_reference",
                 "component_name",
                 "quantity",
-                "unit_price_eur",
-                "extended_cost_eur",
+                "unit_price_usd",
+                "extended_cost_usd",
                 "occurrences",
                 "assembly_context",
                 "country_of_origin",
@@ -212,8 +212,8 @@ def write_components(components: list[Component], path: str | Path) -> None:
                     c.reference,
                     c.name,
                     f"{c.quantity:g}",
-                    f"{c.unit_price_eur:.2f}",
-                    f"{c.extended_cost_eur:.2f}",
+                    f"{c.unit_price_usd:.2f}",
+                    f"{c.extended_cost_usd:.2f}",
                     c.occurrences,
                     c.context,
                     c.country_of_origin,
@@ -237,9 +237,9 @@ def main() -> None:
     out = OUT_DIR / "components.csv"
     write_components(components, out)
     print(f"\nwrote {out}\n")
-    print(f"{'EUR':>9}  {'qty':>6}  component")
+    print(f"{'USD':>9}  {'qty':>6}  component")
     for c in components[:10]:
-        print(f"{c.extended_cost_eur:9.2f}  {c.quantity:6.0f}  {c.name}")
+        print(f"{c.extended_cost_usd:9.2f}  {c.quantity:6.0f}  {c.name}")
 
 
 if __name__ == "__main__":

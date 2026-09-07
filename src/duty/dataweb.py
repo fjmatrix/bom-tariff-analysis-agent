@@ -1,7 +1,6 @@
 """Find leading U.S. import origins for classified HTS codes."""
 
 import argparse
-import csv
 import json
 import os
 from datetime import date
@@ -165,7 +164,6 @@ def get_imports_by_country(
             raise ValueError(f"DataWeb country has no ISO-2 mapping: {name}")
         result.append({
             "country": country,
-            "country_name": name,
             "customs_value_usd": value,
         })
     return sorted(result, key=lambda row: (-row["customs_value_usd"], row["country"]))
@@ -180,51 +178,37 @@ def discover_top_import_countries(
     start, end = trailing_12_months(today)
     codes = sorted({_code(code) for code in hts_codes})
     if not codes:
-        return {
-            "period_start": start,
-            "period_end": end,
-            "measure": "consumption_customs_value_usd",
-            "top_n": top_n,
-            "rankings": [],
-            "errors": [],
-        }
-    country_codes = _country_codes()
-    rankings, errors = [], []
+        return {}
+    result = {
+        code: {"period_start": start, "period_end": end, "countries": {}}
+        for code in codes
+    }
+    try:
+        country_codes = _country_codes()
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        for ranking in result.values():
+            ranking["error"] = str(exc)
+        return result
     for code in codes:
         try:
             countries = get_imports_by_country(code, start, end, country_codes)[:top_n]
         except (httpx.HTTPError, ValueError, KeyError) as exc:
-            errors.append({"hts_code": code, "error": str(exc)})
+            result[code]["error"] = str(exc)
             continue
-        rankings.append({"hts_code": code, "countries": countries})
-    return {
-        "period_start": start,
-        "period_end": end,
-        "measure": "consumption_customs_value_usd",
-        "top_n": top_n,
-        "rankings": rankings,
-        "errors": errors,
-    }
+        result[code]["countries"] = {
+            row["country"]: {"customs_value_usd": row["customs_value_usd"]}
+            for row in countries
+        }
+    return result
 
 
 def write_country_rankings(result: dict, path: str | Path) -> None:
-    fields = [
-        "hts_code", "rank", "country", "country_name", "customs_value_usd",
-        "period_start", "period_end",
-    ]
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fields)
-        writer.writeheader()
-        for ranking in result["rankings"]:
-            for rank, country in enumerate(ranking["countries"], 1):
-                writer.writerow({
-                    "hts_code": ranking["hts_code"],
-                    "rank": rank,
-                    **country,
-                    "period_start": result["period_start"],
-                    "period_end": result["period_end"],
-                })
+    with open(path, "w", encoding="utf-8") as fh:
+        for code, ranking in result.items():
+            fh.write(json.dumps(
+                {code: ranking}, ensure_ascii=False, separators=(",", ":"),
+            ) + "\n")
 
 
 if __name__ == "__main__":

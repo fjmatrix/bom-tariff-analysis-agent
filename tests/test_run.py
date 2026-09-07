@@ -1,6 +1,5 @@
 """Exercise the workflow with model and DataWeb responses replaced."""
 
-import csv
 import json
 from copy import deepcopy
 from types import SimpleNamespace
@@ -16,19 +15,10 @@ from src.run import MAX_TURNS, BomAnalysis, run
 def fake_discovery(codes, top_n):
     assert top_n == 1
     return {
-        "period_start": "09/2025",
-        "period_end": "08/2026",
-        "measure": "consumption_customs_value_usd",
-        "top_n": top_n,
-        "rankings": [{
-            "hts_code": code.replace(".", ""),
-            "countries": [{
-                "country": "CA",
-                "country_name": "Canada",
-                "customs_value_usd": 100,
-            }],
-        } for code in sorted(set(codes))],
-        "errors": [],
+        code.replace(".", ""): {
+            "period_start": "09/2025", "period_end": "08/2026",
+            "countries": {"CA": {"customs_value_usd": 100}},
+        } for code in sorted(set(codes))
     }
 
 
@@ -58,10 +48,14 @@ class DemoClient:
         result = next((
             json.loads(item["output"]) for item in reversed(kwargs["input"])
             if isinstance(item, dict) and item.get("type") == "function_call_output"
-            and "current_duty_eur" in json.loads(item["output"])
-        ), {"current_duty_eur": 0, "best_savings_eur": 0})
-        brief = (f"Current duty: €{result['current_duty_eur']:.2f}. "
-                 f"Modeled savings: €{result['best_savings_eur']:.2f}.")
+            and item["call_id"] in {
+                call.call_id for call in kwargs["input"]
+                if getattr(call, "name", None) == "calculate_duty_scenarios"
+            }
+        ), {})
+        washer = result.get("DEMO-WASHER", {}).get("countries", {})
+        brief = (f"Washer current duty: ${washer.get('CN', {}).get('duty_usd', 0):.2f}. "
+                 f"Canada savings: ${washer.get('CA', {}).get('savings_usd', 0):.2f}.")
         return SimpleNamespace(
             status="completed", output_text=brief,
             output=[SimpleNamespace(type="message", content=brief)],
@@ -100,14 +94,14 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert client.requests[1]["input"][-1]["call_id"] == "call-1"
     assert client.requests[2]["input"][-1]["call_id"] == "call-2"
     assert client.requests[3]["input"][-1]["call_id"] == "call-3"
-    assert "€0.58" in brief
+    assert "$0.58" in brief
     assert (tmp_path / "brief.md").read_text() == brief
-    with (tmp_path / "scenarios.csv").open(newline="") as fh:
-        assert len(list(csv.DictReader(fh))) == 4
-    with (tmp_path / "trade_countries.csv").open(newline="") as fh:
-        countries = list(csv.DictReader(fh))
+    scenarios = [json.loads(line) for line in (tmp_path / "scenarios.jsonl").read_text().splitlines()]
+    result = json.loads(client.requests[3]["input"][-1]["output"])
+    assert scenarios == [{reference: part} for reference, part in result.items()]
+    countries = [json.loads(line) for line in (tmp_path / "trade_countries.jsonl").read_text().splitlines()]
     assert len(countries) == 2
-    assert {row["hts_code"] for row in countries} == {"7318160060", "7318210030"}
+    assert {code for row in countries for code in row} == {"7318160060", "7318210030"}
     output = capsys.readouterr().out
     assert "Agent calls classify_bom()" in output
     assert "Agent calls find_top_import_countries()" in output
@@ -158,7 +152,8 @@ def test_repeated_tools_reuse_completed_work(tmp_path):
 
     result = analysis.calculate_duty_scenarios()
     assert analysis.calculate_duty_scenarios() is result
-    assert result["trade_data"]["period_start"] == "09/2025"
+    assert set(result) == {"DEMO-NUT", "DEMO-WASHER"}
+    assert rankings["7318210030"]["period_start"] == "09/2025"
 
 
 def test_unknown_tool_returns_feedback_without_dispatch(tmp_path):
@@ -172,6 +167,27 @@ def test_unknown_tool_returns_feedback_without_dispatch(tmp_path):
     execute(client, tmp_path)
     error = json.loads(client.requests[1]["input"][-1]["output"])
     assert error == {"error": "Unknown tool: delete_files"}
+
+
+def test_country_lookup_errors_still_allow_current_origin_scenarios(tmp_path):
+    def discovery(codes, top_n):
+        return {
+            code.replace(".", ""): {
+                "period_start": "09/2025", "period_end": "08/2026",
+                "countries": {}, "error": "unavailable",
+            } for code in codes
+        }
+
+    analysis = BomAnalysis(
+        ROOT / "examples/two_parts.csv", 1, tmp_path, DemoClient(), discovery,
+    )
+    analysis.classify_bom()
+    analysis.find_top_import_countries()
+    result = analysis.calculate_duty_scenarios()
+    assert result["DEMO-WASHER"]["countries"] == {
+        "CN": {"duty_usd": 0.58, "savings_usd": 0.0},
+    }
+    assert set(result) == {"DEMO-NUT", "DEMO-WASHER"}
 
 
 @pytest.mark.parametrize("arguments", ['{"country": "CA"}', "invalid", "null", "[]"])
