@@ -1,0 +1,4 @@
+level,component_reference,component_name,component_quantity,parent_bom_reference,has_child_bom,unit_price_eur,country_of_origin
+0,DEMO-ASSEMBLY,Two-part fastener assembly,1,,True,30.00,CN
+1,DEMO-NUT,Stainless steel hex nut M8 DIN934 (not a wheel lugnut),10,DEMO-ASSEMBLY,False,2.00,CN
+1,DEMO-WASHER,Steel helical spring lock washer M8 DIN127,20,DEMO-ASSEMBLY,False,0.50,CN

@@ -87,6 +87,17 @@ def test_assembly_context_is_populated(bom):
     assert "DIN912" in c.context
 
 
+def test_origin_is_carried_through_aggregation_and_export(bom, tmp_path):
+    from src.bom.flatten import write_components
+
+    part = next(c for c in bom.components() if c.reference == "M01697")
+    assert part.country_of_origin == "CN"
+    path = tmp_path / "components.csv"
+    write_components([part], path)
+    with path.open(newline="") as fh:
+        assert next(csv.DictReader(fh))["country_of_origin"] == "CN"
+
+
 # -- the guards actually fire ------------------------------------------------
 
 def _rows(overrides: dict[int, dict]) -> list[dict]:
@@ -127,6 +138,14 @@ def test_aggregation_catches_inconsistent_unit_price(tmp_path):
     path = _write(rows, tmp_path / "price.csv")
     with pytest.raises(ValidationError, match="inconsistent unit price"):
         Bom.load(path).components()
+
+
+def test_aggregation_does_not_merge_different_origins(tmp_path):
+    rows = _rows({})
+    first = next(i for i, r in enumerate(rows) if r["component_reference"] == "M01697")
+    rows[first]["country_of_origin"] = "TW"
+    with pytest.raises(ValidationError, match="inconsistent country of origin"):
+        Bom.load(_write(rows, tmp_path / "origins.csv")).components()
 
 
 # -- the forensic checks still work (they are not in the pipeline) -----------

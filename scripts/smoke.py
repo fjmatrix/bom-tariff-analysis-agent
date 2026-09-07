@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from src.agent.loop import MAX_OUTPUT_TOKENS, MODEL, Selection, resolve
-from src.agent.prompts import component_prompt, system_prompt
+from src.classify.classifier import MAX_OUTPUT_TOKENS, MODEL, Selection, resolve
+from src.classify.prompts import component_prompt, system_prompt
 from src.bom.flatten import Bom
 from src.config import BOM_CSV, HTS_JSON
 from src.hts.index import HtsIndex
@@ -56,7 +56,7 @@ def main() -> None:
     rule("RESOLVED (what the loop would have written)")
     selection = response.output_parsed
     assert selection is not None, f"nothing parsed; status={response.status}"
-    print(json.dumps(asdict(resolve(component, selection, index, tree.candidates)), indent=2))
+    print(json.dumps(asdict(resolve(component, selection, tree.candidates)), indent=2))
 
 
 if __name__ == "__main__":

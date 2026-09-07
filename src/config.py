@@ -19,5 +19,5 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 HTS_JSON = ROOT / "htsdata.json"
-BOM_CSV = ROOT / "EVOM V1.0 priced.csv"
+BOM_CSV = ROOT / "BOM.csv"
 OUT_DIR = ROOT / "out"

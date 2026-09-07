@@ -40,6 +40,7 @@ class BomRow:
     unit_price_eur: float
     parent_line: int | None = None
     assembly_path: tuple[str, ...] = ()
+    country_of_origin: str = ""
 
     @property
     def extended_cost_eur(self) -> float:
@@ -56,6 +57,7 @@ class Component:
     unit_price_eur: float
     occurrences: int
     assembly_paths: list[tuple[str, ...]] = field(default_factory=list)
+    country_of_origin: str = ""
 
     @property
     def extended_cost_eur(self) -> float:
@@ -97,6 +99,7 @@ class Bom:
                     parent_reference=raw["parent_bom_reference"].strip(),
                     has_child_bom=raw["has_child_bom"].strip() == "True",
                     unit_price_eur=float(raw["unit_price_eur"]),
+                    country_of_origin=raw.get("country_of_origin", "").strip().upper(),
                 )
                 for lvl in [k for k in stack if k >= level]:
                     del stack[lvl]
@@ -166,6 +169,11 @@ class Bom:
                 raise ValidationError(
                     f"{reference}: inconsistent unit price across occurrences {sorted(prices)}"
                 )
+            origins = {r.country_of_origin for r in rows}
+            if len(origins) > 1:
+                raise ValidationError(
+                    f"{reference}: inconsistent country of origin across occurrences"
+                )
             out.append(
                 Component(
                     reference=reference,
@@ -174,6 +182,7 @@ class Bom:
                     unit_price_eur=rows[0].unit_price_eur,
                     occurrences=len(rows),
                     assembly_paths=[r.assembly_path for r in rows],
+                    country_of_origin=rows[0].country_of_origin,
                 )
             )
         self.reconcile()
@@ -194,6 +203,7 @@ def write_components(components: list[Component], path: str | Path) -> None:
                 "extended_cost_eur",
                 "occurrences",
                 "assembly_context",
+                "country_of_origin",
             ]
         )
         for c in components:
@@ -206,6 +216,7 @@ def write_components(components: list[Component], path: str | Path) -> None:
                     f"{c.extended_cost_eur:.2f}",
                     c.occurrences,
                     c.context,
+                    c.country_of_origin,
                 ]
             )
 

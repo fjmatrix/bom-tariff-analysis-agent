@@ -2,14 +2,17 @@
 
 What is cached is the *selection*, not the classification. The branch logic in
 `loop.py` re-runs on every replay, so changing how Python treats an answer --
-which is the whole difference between eval arms B and C -- costs nothing and
-calls nothing. Changing the prompt does not get that treatment: the model
+now validation and code resolution -- costs nothing and calls nothing.
+Changing the prompt does not get that treatment: the model
 returns an integer whose meaning is fixed by the tree it read, so a cached
 `choice: 25` from a different tree points at a different code.
 
 `fingerprint` is that guard. It covers the system prompt (which contains the
 tree) and the model id, so swapping htsdata.json, reordering candidates or
 switching models invalidates rather than silently mis-resolves.
+
+The classifier also includes the component prompt in the stored fingerprint,
+so an uploaded BOM with a changed description or assembly context is refreshed.
 """
 
 from __future__ import annotations

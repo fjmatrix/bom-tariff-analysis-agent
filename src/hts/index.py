@@ -45,6 +45,7 @@ class HtsRecord:
     children: list[str] = field(default_factory=list)
 
     general: str = ""  # inherited
+    special: str = ""  # inherited from the rate-bearing legal line
     rate_source: str = ""  # which code supplied it
     ad_valorem: float | None = None  # None only on grouping rows; see parse_rate
 
@@ -125,6 +126,7 @@ class HtsIndex:
                 htsno=row.get("htsno") or "",
                 description=_clean(row.get("description")),
                 general=(row.get("general") or "").strip(),
+                special=_clean(row.get("special")),
             )
             stack.append(rec)
 
@@ -158,7 +160,8 @@ class HtsIndex:
                 node = self.by_code.get(node.parent) if node.parent else None
             if node is not None:
                 rec.general = node.general
-                rec.rate_source = node.htsno
+                rec.special = rec.special or node.special
+                rec.rate_source = node.rate_source or node.htsno
                 rec.ad_valorem = parse_rate(node.general)
 
     # -- lookups -------------------------------------------------------------
