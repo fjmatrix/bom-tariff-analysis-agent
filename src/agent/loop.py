@@ -42,7 +42,7 @@ from src.bom.flatten import Component
 from src.hts.index import HtsIndex, HtsRecord
 from src.hts.render import CandidateTree, render
 
-MODEL = "5.6-terra"
+MODEL = "gpt-5.6-luna"
 MAX_OUTPUT_TOKENS = 16000
 LOW_CONFIDENCE = 0.5  # below this the code falls back to its rate_source line
 
@@ -76,7 +76,7 @@ class Classification:
     abstain_chapter: str
 
 
-def _rate_bearing(chosen: HtsRecord, alternatives: list[HtsRecord]) -> bool:
+def _could_change_duty(chosen: HtsRecord, alternatives: list[HtsRecord]) -> bool:
     """Could landing on one of these alternatives instead change the duty?
 
     A rate is fixed at the 8-digit legal line, so an alternative sharing the
@@ -92,7 +92,7 @@ def _rate_bearing(chosen: HtsRecord, alternatives: list[HtsRecord]) -> bool:
     )
 
 
-def _escalate(
+def _review_reason(
     selection: Selection, chosen: HtsRecord, runner_up: HtsRecord | None, index: HtsIndex
 ) -> str | None:
     """Why this needs a human, or None to accept the choice.
@@ -104,14 +104,14 @@ def _escalate(
     """
     if not selection.evidence or selection.evidence not in chosen.path:
         return "evidence_not_in_path"  # '' is a substring of every path
-    if runner_up and _rate_bearing(chosen, [runner_up]):
+    if runner_up and _could_change_duty(chosen, [runner_up]):
         return "runner_up_rate_differs"
     siblings = [
         r
         for r in index.children_of(chosen.parent)
         if r.is_candidate and r.htsno != chosen.htsno
     ]
-    if selection.unresolved and _rate_bearing(chosen, siblings):
+    if selection.unresolved and _could_change_duty(chosen, siblings):
         return "unresolved_attribute_rate_bearing"
     return None
 
@@ -142,7 +142,7 @@ def resolve(
             else None
         )
         code = chosen.htsno
-        reason = _escalate(selection, chosen, runner_up, index)
+        reason = _review_reason(selection, chosen, runner_up, index)
         status = "needs_review" if reason else "classified"
         if reason is None:
             reason = (
@@ -206,6 +206,14 @@ class Classifier:
             text_format=Selection,
         )
         selection = response.output_parsed
+        if selection is None:
+            # No parsed content: the response was truncated mid-reasoning, or
+            # the model refused. Neither is a classification, and neither is
+            # worth a fallback -- there is nothing to fall back to.
+            raise RuntimeError(
+                f"{component.reference}: no selection in response "
+                f"(status={response.status}, {response.incomplete_details})"
+            )
         self.cache.put(component.reference, self.fingerprint, selection.model_dump())
         return selection
 

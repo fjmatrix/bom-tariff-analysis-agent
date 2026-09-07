@@ -76,7 +76,7 @@ class Component:
 class ValidationError(AssertionError):
     pass
 
-
+# Indentation is the sole source of hierarchy.
 class Bom:
     def __init__(self, rows: list[BomRow]):
         self.rows = rows

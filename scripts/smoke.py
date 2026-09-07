@@ -30,7 +30,7 @@ def rule(label: str) -> None:
 def main() -> None:
     index = HtsIndex.load(HTS_JSON)
     tree = render(index)
-    component = Bom.load(BOM_CSV).components()[0]  # sorted by cost; [0] is dearest
+    component = Bom.load(BOM_CSV).components()[52]  # sorted by cost; [0] is dearest
 
     rule("TREE (the whole of what the model reads)")
     print(tree.text)
@@ -51,10 +51,12 @@ def main() -> None:
     )
 
     rule("RAW RESPONSE")
-    print(response.model_dump_json(indent=2))
+    print(json.dumps(response.model_dump(mode="json", warnings=False), indent=2))
 
     rule("RESOLVED (what the loop would have written)")
-    print(json.dumps(asdict(resolve(component, response.output_parsed, index, tree.candidates)), indent=2))
+    selection = response.output_parsed
+    assert selection is not None, f"nothing parsed; status={response.status}"
+    print(json.dumps(asdict(resolve(component, selection, index, tree.candidates)), indent=2))
 
 
 if __name__ == "__main__":

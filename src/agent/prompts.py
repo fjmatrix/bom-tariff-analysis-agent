@@ -32,10 +32,7 @@ numbered lines are selectable.
 
 Return the number of the single line that best classifies the component.
 
-- choice: the number, or null if nothing in this tree fits. This tree covers a
-  narrow slice of the schedule, so most components will not belong in it.
-  Abstaining is the correct answer far more often than not; a confident wrong
-  line is the expensive mistake, not a null.
+- choice: the number, or null if nothing in this tree fits. 
 - abstain_chapter: when you abstain, the HTS chapter or heading you believe the
   component belongs to. Empty string when you chose a line.
 - evidence: a phrase copied VERBATIM from the line you chose, or from a line

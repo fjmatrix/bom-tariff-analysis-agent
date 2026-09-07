@@ -19,6 +19,29 @@ RECOMMEND top-N (conditional LLM fan-out)
 
 Full design in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
+## Demo origin assumptions
+
+`EVOM V1.0 priced.csv` includes `country_of_origin`, using ISO 3166-1 alpha-2
+codes. **Every value is a synthetic demo assumption, not verified supplier or
+shipment origin.** The descriptions cannot establish actual origin. Repeated
+component references have the same assumed country.
+
+The scenario assigns CN to generic electronics, fasteners and mechanical parts;
+TW to hand tools; DE to aluminium profiles, PMMA sheet and Wago connectors; BE
+to custom steel parts, custom motor/switch cables, the test plate and assembly
+rows; GB to the Raspberry Pi; KR to the Samsung memory card; and SI to the CNC
+controller and its license. These are scenario choices, not deductions from
+brand headquarters or proof of preferential tariff eligibility. Raspberry Pi's
+[UK manufacturing information](https://www.raspberrypi.com/news/explore-the-raspberry-pi-factory-floor-in-wales-uk/)
+supports the plausibility of GB, but does not verify this particular BOM's unit.
+
+The duty demo assumes components are imported separately for domestic assembly.
+Use leaf rows to avoid double counting. BE on assembly rows is an assembly
+scenario placeholder, not a legal origin determination for a finished machine.
+The software license (M00368) has an assumed provider country only and needs
+separate treatment before physical-goods duty calculations. The existing BOM
+loader does not yet carry the origin column into its component objects.
+
 ## Scope
 
 `htsdata.json` is **heading 7318 only** — 48 classifiable leaves. Of the 147
@@ -133,6 +156,18 @@ Stages 1, 3, 4 and 5 are deterministic. Stage 2 is the agent. Stage 6 is a
 conditional invocation. That ratio is the honest description of the system.
 
 ## Run
+
+For annual import customs value by country, set `DATAWEB_API_KEY` in `.env`:
+
+```bash
+.venv/bin/python -m src.duty.dataweb 7318.15.60 --year 2025
+```
+
+This calls DataWeb's `POST /api/v2/report2/runReport` and prints the report DTO
+as JSON. It accepts 8- or 10-digit HTS codes, with or without dots. The fixed
+report uses imports for consumption, countries displayed separately, and actual
+USD customs values. The year defaults to 2025; no caching or share calculation
+is included. Request format follows the [USITC API guide](https://www.usitc.gov/applications/dataweb/api/dataweb_query_api.html).
 
 ```bash
 uv venv && uv pip install -e '.[dev]'
