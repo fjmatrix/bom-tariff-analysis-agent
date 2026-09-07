@@ -11,6 +11,7 @@ from src.classify.prompts import component_prompt, system_prompt
 from src.bom.flatten import Component
 from src.hts.index import HtsRecord
 from src.hts.render import CandidateTree
+from src.usage import TokenUsage
 
 MODEL = "gpt-5.6-luna"
 MAX_OUTPUT_TOKENS = 16000
@@ -52,11 +53,12 @@ def resolve(
 
 
 class Classifier:
-    def __init__(self, tree: CandidateTree, cache: SelectionCache, client):
+    def __init__(self, tree: CandidateTree, cache: SelectionCache, client, usage=None):
         self.tree = tree
         self.cache = cache
         self.client = client
         self.system = system_prompt(tree)
+        self.usage = usage if usage is not None else TokenUsage()
 
     def select(self, component: Component) -> Selection:
         prompt = component_prompt(component)
@@ -64,10 +66,14 @@ class Classifier:
         cached = self.cache.get(key)
         if cached is not None:
             try:
-                return Selection.model_validate(cached)
+                selection = Selection.model_validate(cached)
             except ValidationError:
                 pass
-        response = self.client.responses.parse(
+            else:
+                self.usage.record("classification", component.reference, MODEL)
+                return selection
+        response = self.usage.request(
+            self.client.responses.parse, "classification", component.reference,
             model=MODEL,
             max_output_tokens=MAX_OUTPUT_TOKENS,
             instructions=self.system,

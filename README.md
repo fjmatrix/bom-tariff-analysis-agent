@@ -1,7 +1,7 @@
 # BOM Tariff Exposure Agent
 
 Classify purchased parts in a priced BOM, calculate HTS duty by origin country,
-and write a short decision brief and compact JSONL comparisons.
+and write a decision brief and compact JSONL comparisons.
 
 The model receives all three tools on each turn and chooses a tool or a final answer.
 Python executes the selected function and returns its result to the model.
@@ -120,6 +120,68 @@ using unchanged BOM purchase values as the duty base. Duty is rounded to cents
 per part. Savings compare each scenario with the part's current origin.
 The brief identifies the best alternative for each part.
 
+## Decision brief
+
+`brief.md` uses four sections:
+
+1. **Summary:** known duty per finished product, duty as a percentage of total
+   BOM cost, modeled savings, and the potentially addressable share of known duty.
+   Coverage is shown by purchased-part count and BOM value.
+2. **Product Exposure:** the top 10 purchased parts by current duty, with origin,
+   duty per finished product, and duty as a percentage of the entire BOM cost.
+   The input describes one finished product, so this is a part breakdown.
+3. **Sourcing Opportunities:** the best positive-saving origin per part, current
+   and alternative duty, savings, current purchase price, and the break-even
+   alternative purchase price per piece. Tied options count only once in savings.
+4. **Recommended Actions:** prioritized quote and verification steps, plus
+   unresolved exposure, unsupported alternatives, trade period, and lookup errors.
+
+Python calculates the figures and rankings in `brief_data.json` before the model
+writes the narrative. Total BOM cost includes unresolved parts; known duty does
+not treat their missing exposure as zero. With no supported parts, exposure is
+unavailable. With zero known duty, the addressable percentage is not applicable.
+No identified opportunity means no positive saving in the supported, discovered
+alternatives, rather than proof that no sourcing opportunity exists.
+
+Annual production volume and an exchange rate are absent from the input, so the
+brief reports USD per finished product and marks annual exposure unavailable.
+Annual modeled exposure would be unit exposure times annual finished-product
+volume; BOM quantities are not annual volumes.
+
+The break-even purchase price is:
+
+```text
+current per-piece price × (1 + current duty rate) / (1 + alternative duty rate)
+```
+
+This matches purchase price plus modeled duty. It excludes freight, tooling,
+qualification, switching costs, and unmodeled duties. It is a quote ceiling,
+not an available supplier price. For the demo washer, a supported CA scenario
+saves $0.58 per finished product at the current $0.50 purchase price and has a
+$0.529 break-even price per piece. A JP scenario with 2.9% duty instead has a
+$0.514091 break-even price. Actual alternatives depend on country discovery.
+
+## Token usage
+
+Every classification request and agent turn prints input, cached input, output,
+reasoning, and total tokens. Final terminal totals separate classification and
+agent usage and include their combined run total. Local classification-cache hits
+are logged with zero tokens and do not count as API calls.
+
+`token_usage.json` is updated after every event and finalized on success or
+failure. It contains chronological events (part reference or turn number, model,
+response ID, status, and counts), stage totals, and run totals. Each invocation
+starts a fresh trace, including when reusing an output directory. No prompts or
+credentials are included in the trace.
+
+Counts come from response usage, including incomplete responses. Cached input
+and reasoning are subsets of input and output and are not added to the total
+again, following [OpenAI's accounting guidance](https://developers.openai.com/cookbook/articles/per_run_spending_controller_responses_api#limits-and-other-costs).
+An exception or response without usage is recorded with null counts and increases
+`calls_without_usage`; aggregate counts sum only reported usage. SDK-internal
+retries with no returned usage cannot be measured by this trace, so it is not
+an account billing reconciliation.
+
 ## Input and outputs
 
 The BOM uses this CSV format:
@@ -132,11 +194,12 @@ Quantities are already per finished product. Repeated references are aggregated
 and must have the same unit price and origin. The assembly root must reconcile
 with the total purchased-part value.
 
-Outputs are `brief.md`, `scenarios.jsonl`, `trade_countries.jsonl`, `components.csv`,
-`classified.csv`, and `selection_cache.json`. Tool calls and results print in the terminal.
+Outputs are `brief.md`, `brief_data.json`, `token_usage.json`, `scenarios.jsonl`,
+`trade_countries.jsonl`, `components.csv`, `classified.csv`, and `selection_cache.json`.
+Tool calls, results, and token counts print in the terminal.
 Both comparison tools return objects. Scenarios are keyed by part reference;
 country rankings are keyed by HTS code. Each JSONL line contains one such entry,
-so merging the line objects reconstructs the tool result. Numeric values remain
+so merging the line objects reconstructs the corresponding comparison object. Numeric values remain
 numbers, and empty results produce empty files.
 
 Example `scenarios.jsonl` line:
@@ -152,7 +215,8 @@ Example `trade_countries.jsonl` line:
 ```
 
 Scenarios contain only part entries, without repeated summary rankings or trade
-metadata. The brief uses the calculated per-part duty and savings amounts.
+metadata. The agent's calculation tool returns these under `scenarios`, alongside
+the computed `brief_data` used to write the brief.
 
 The classifier returns only a candidate number (or null) and evidence. Python
 validates the index and checks the evidence against the candidate's HTS path.
@@ -174,11 +238,13 @@ so full-BOM results cover only that scope.
 | `src/duty/dataweb.py` | Trailing-12-month import-origin discovery |
 | `src/duty/rates.py` | Country/program qualification and HTS rate selection |
 | `src/duty/scenarios.py` | Per-part duty, savings, and JSONL |
+| `src/brief.py` | Summary, coverage, exposure rankings, and sourcing price ceilings |
+| `src/usage.py` | Per-request token trace, stage totals, and run totals |
 | `src/run.py` | Model-selected tool loop and brief |
 
 Focused verification, without live API calls:
 
 ```bash
-.venv/bin/python -m pytest tests/test_agent_loop.py tests/test_dataweb.py \
-  tests/test_duty_scenarios.py tests/test_run.py tests/test_bom_flatten.py -q
+.venv/bin/python -m pytest tests/test_brief.py tests/test_usage.py \
+  tests/test_run.py tests/test_agent_loop.py -q
 ```

@@ -12,6 +12,15 @@ from src.hts.index import HtsIndex
 from src.run import MAX_TURNS, BomAnalysis, run
 
 
+def fake_usage(input_tokens=100, output_tokens=20):
+    return SimpleNamespace(
+        input_tokens=input_tokens, output_tokens=output_tokens,
+        total_tokens=input_tokens + output_tokens,
+        input_tokens_details=SimpleNamespace(cached_tokens=input_tokens // 2),
+        output_tokens_details=SimpleNamespace(reasoning_tokens=output_tokens // 2),
+    )
+
+
 def fake_discovery(codes, top_n):
     assert top_n == 1
     return {
@@ -40,6 +49,7 @@ class DemoClient:
         if name is not None:
             return SimpleNamespace(
                 status="completed",
+                usage=fake_usage(),
                 output=[SimpleNamespace(
                     type="function_call", name=name,
                     call_id=f"call-{len(self.requests)}", arguments="{}",
@@ -53,11 +63,12 @@ class DemoClient:
                 if getattr(call, "name", None) == "calculate_duty_scenarios"
             }
         ), {})
-        washer = result.get("DEMO-WASHER", {}).get("countries", {})
+        washer = result.get("scenarios", {}).get("DEMO-WASHER", {}).get("countries", {})
         brief = (f"Washer current duty: ${washer.get('CN', {}).get('duty_usd', 0):.2f}. "
                  f"Canada savings: ${washer.get('CA', {}).get('savings_usd', 0):.2f}.")
         return SimpleNamespace(
             status="completed", output_text=brief,
+            usage=fake_usage(),
             output=[SimpleNamespace(type="message", content=brief)],
         )
 
@@ -67,7 +78,7 @@ class DemoClient:
         code = "7318.16.00.60" if "DEMO-NUT" in prompt else "7318.21.00.30"
         index = HtsIndex.load(HTS_JSON)
         choice = next(i for i, row in enumerate(index.candidates) if row.htsno == code)
-        return SimpleNamespace(status="completed", output_parsed=Selection(
+        return SimpleNamespace(status="completed", usage=fake_usage(1000, 100), output_parsed=Selection(
             choice=choice, evidence=index.get(code).description,
         ))
 
@@ -98,17 +109,38 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert (tmp_path / "brief.md").read_text() == brief
     scenarios = [json.loads(line) for line in (tmp_path / "scenarios.jsonl").read_text().splitlines()]
     result = json.loads(client.requests[3]["input"][-1]["output"])
-    assert scenarios == [{reference: part} for reference, part in result.items()]
+    assert scenarios == [{reference: part} for reference, part in result["scenarios"].items()]
+    facts = json.loads((tmp_path / "brief_data.json").read_text())
+    assert result["brief_data"] == facts
+    assert facts["summary"]["known_current_duty_per_finished_product_usd"] == 0.58
+    assert facts["summary"]["potentially_addressable_pct_known_exposure"] == 100
+    assert facts["sourcing_opportunities"][0]["break_even_alternative_purchase_price_per_piece_usd"] == 0.529
     countries = [json.loads(line) for line in (tmp_path / "trade_countries.jsonl").read_text().splitlines()]
     assert len(countries) == 2
     assert {code for row in countries for code in row} == {"7318160060", "7318210030"}
     output = capsys.readouterr().out
     assert "Agent calls classify_bom()" in output
     assert "Agent calls find_top_import_countries()" in output
+    assert "Tokens [classification DEMO-WASHER]" in output
+    assert "Tokens [agent turn-4]" in output
+    assert "Token totals [run]" in output
+    usage = json.loads((tmp_path / "token_usage.json").read_text())
+    assert usage["status"] == "completed"
+    assert usage["totals"]["total_tokens"] == 2680
+    assert usage["stages"]["classification"]["total_tokens"] == 2200
+    assert usage["stages"]["agent"]["total_tokens"] == 480
+    assert usage["totals"]["api_calls"] == 6
+    assert [event["label"] for event in usage["events"]] == [
+        "turn-1", "DEMO-NUT", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
+    ]
 
     replay = DemoClient()
     execute(replay, tmp_path)
     assert replay.classifier_calls == 0
+    replay_usage = json.loads((tmp_path / "token_usage.json").read_text())
+    assert replay_usage["totals"]["total_tokens"] == 480
+    assert replay_usage["stages"]["classification"]["cache_hits"] == 2
+    assert replay_usage["stages"]["classification"]["api_calls"] == 0
 
 
 def test_agent_recovers_from_out_of_order_tools_and_early_brief(tmp_path):
@@ -217,6 +249,9 @@ def test_non_finishing_agent_is_bounded_and_does_not_write_brief(tmp_path, seque
         execute(client, tmp_path)
     assert len(client.requests) == MAX_TURNS
     assert not (tmp_path / "brief.md").exists()
+    usage = json.loads((tmp_path / "token_usage.json").read_text())
+    assert usage["status"] == "failed"
+    assert usage["stages"]["agent"]["api_calls"] == MAX_TURNS
 
 
 def test_incomplete_response_does_not_execute_tool(tmp_path):
@@ -233,3 +268,24 @@ def test_incomplete_response_does_not_execute_tool(tmp_path):
         execute(client, tmp_path)
     assert client.classifier_calls == 0
     assert not (tmp_path / "brief.md").exists()
+    usage = json.loads((tmp_path / "token_usage.json").read_text())
+    assert usage["status"] == "failed"
+    assert usage["totals"]["total_tokens"] == 120
+    assert usage["events"][0]["status"] == "incomplete"
+
+
+def test_classification_exception_preserves_outer_usage(tmp_path):
+    client = DemoClient()
+
+    def parse(**kwargs):
+        raise RuntimeError("provider unavailable")
+
+    client.parse = parse
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        execute(client, tmp_path)
+    usage = json.loads((tmp_path / "token_usage.json").read_text())
+    assert usage["status"] == "failed"
+    assert usage["totals"]["total_tokens"] == 120
+    assert usage["totals"]["calls_without_usage"] == 1
+    assert usage["events"][-1]["stage"] == "classification"
+    assert usage["events"][-1]["total_tokens"] is None

@@ -10,20 +10,47 @@ from openai import OpenAI
 from src.classify.cache import SelectionCache
 from src.classify.classifier import MODEL, MAX_OUTPUT_TOKENS, Classifier, write_classified
 from src.bom.flatten import Bom, write_components
+from src.brief import build_brief_data
 from src.config import BOM_CSV, HTS_JSON, OUT_DIR
 from src.duty.dataweb import discover_top_import_countries, write_country_rankings
 from src.duty.scenarios import calculate_duty_scenarios, write_scenarios
 from src.hts.index import HtsIndex
 from src.hts.render import render
+from src.usage import TokenUsage
 
 MAX_TURNS = 8
 
 INSTRUCTIONS = """Call classify_bom, find_top_import_countries, then
 calculate_duty_scenarios. Follow tool error feedback and finish all three before
-writing a short Markdown brief; do not ask questions or reclassify parts.
-Report each part's current duty and best origin savings using the calculated
-USD amounts. Use classification names/references and list unresolved parts,
-coverage, the trade period, and lookup errors once.
+writing a decision-ready Markdown brief; do not ask questions or reclassify parts.
+Use exactly these four numbered sections and the calculated brief_data facts:
+1) Summary: known current tariff exposure in USD per finished product, exposure
+as a percentage of total BOM cost, potential savings and potentially addressable
+percentage of known exposure. Annual exposure is unavailable without annual
+production volume; give the formula, never invent a volume or EUR conversion.
+Identify partial exposure prominently with coverage by part count and BOM cost.
+Null metrics mean unavailable, never zero. Zero known duty makes the addressable
+percentage not applicable. No discovered savings does not prove none exist.
+2) Product Exposure: this input is one finished-product BOM, not a portfolio.
+Show a table of its top 10 purchased parts by current duty (or all if fewer),
+with reference/name, current origin, current duty per finished product, and
+exposure as % of TOTAL BOM cost. Label this as a part-level breakdown. Do not
+confuse quantities per finished product with annual production volume.
+3) Sourcing Opportunities: rank the best positive-saving option per part, showing
+current vs alternative origin, current vs alternative duty, duty savings per
+finished product, current purchase price per piece, and break-even alternative
+purchase price per piece. Preserve enough price decimals for low-cost parts.
+Show tied origins without adding their savings together. If none, say no positive
+savings were identified among supported, discovered alternatives. Explain the
+provided break-even formula and excluded costs; these are quote ceilings, not
+supplier offers. Potential savings assume unchanged purchase values.
+4) Recommended Actions: give a prioritized, concrete sequence grounded in the
+largest opportunities and unresolved exposure: verify classification/program
+eligibility, seek origin-qualified quotes against the computed price ceilings,
+and compare omitted logistics/qualification costs before switching. Do not
+claim actual supplier availability, guaranteed savings, owners, or deadlines.
+Use classification names/references and list unresolved parts, unsupported
+alternatives, the trade period, and lookup errors once under this section.
 Amounts use unchanged BOM values per finished product with separately imported
 parts. HTS snapshot rates assume Special-program eligibility; group preferences,
 Chapter 99, Column 2, and additional duties are excluded. State these assumptions
@@ -36,6 +63,7 @@ class BomAnalysis:
     def __init__(
         self, bom_path, top_countries, out_dir, client,
         country_discovery=discover_top_import_countries,
+        usage=None,
     ):
         if top_countries < 1:
             raise ValueError("top_countries must be at least 1")
@@ -46,10 +74,12 @@ class BomAnalysis:
         self.classifier = Classifier(
             render(self.index),
             SelectionCache.load(self.out_dir / "selection_cache.json"), client,
+            usage=usage,
         )
         self.classifications = None
         self.country_rankings = None
         self.scenarios = None
+        self.brief_data = None
         self.country_discovery = country_discovery
 
     def classify_bom(self):
@@ -93,14 +123,33 @@ class BomAnalysis:
                 self.components, self.classifications, self.index, countries_by_code,
             )
             write_scenarios(self.scenarios, self.out_dir / "scenarios.jsonl")
+            self.brief_data = build_brief_data(
+                self.components, self.classifications, self.scenarios, self.index,
+            )
+            (self.out_dir / "brief_data.json").write_text(
+                json.dumps(self.brief_data, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
         return self.scenarios
 
 
 def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -> str:
+    usage = TokenUsage(Path(out_dir) / "token_usage.json")
+    status = "failed"
+    try:
+        brief = _run(bom_path, top_countries, out_dir, client, country_discovery, usage)
+        status = "completed"
+        return brief
+    finally:
+        usage.finish(status)
+
+
+def _run(bom_path, top_countries, out_dir, client, country_discovery, usage) -> str:
     client = client if client is not None else OpenAI()
     analysis = BomAnalysis(
         bom_path, top_countries, out_dir, client,
         country_discovery or discover_top_import_countries,
+        usage=usage,
     )
     conversation = [{"role": "user", "content": "Analyze the loaded BOM and country scenarios."}]
     actions = {
@@ -126,8 +175,9 @@ def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -
                        "additionalProperties": False},
         "strict": True,
     } for name, (description, _) in actions.items()]
-    for _ in range(MAX_TURNS):
-        response = client.responses.create(
+    for turn in range(1, MAX_TURNS + 1):
+        response = usage.request(
+            client.responses.create, "agent", f"turn-{turn}",
             model=MODEL,
             instructions=INSTRUCTIONS,
             input=conversation,
@@ -151,7 +201,7 @@ def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -
             if not response.output_text.strip():
                 raise RuntimeError("No brief returned")
             brief = response.output_text.strip() + "\n"
-            (analysis.out_dir / "brief.md").write_text(brief)
+            (analysis.out_dir / "brief.md").write_text(brief, encoding="utf-8")
             print(f"Wrote results to {analysis.out_dir}", flush=True)
             return brief
 
@@ -170,6 +220,8 @@ def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -
         else:
             # Tool execution
             result = actions[call.name][1]()
+            if call.name == "calculate_duty_scenarios" and analysis.brief_data is not None:
+                result = {"scenarios": result, "brief_data": analysis.brief_data}
         output = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
         print(f"Tool result: {output}", flush=True)
         conversation.append({
