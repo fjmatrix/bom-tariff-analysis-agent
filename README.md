@@ -3,8 +3,9 @@
 ![BOM tariff analysis showing sourcing opportunities and the completed workflow](docs/assets/cover.png)
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![GitHub stars](https://img.shields.io/github/stars/fjmatrix/bom-tariff-analysis-agent?style=flat)](https://github.com/fjmatrix/bom-tariff-analysis-agent/stargazers)
-[![Last commit](https://img.shields.io/github/last-commit/fjmatrix/bom-tariff-analysis-agent)](https://github.com/fjmatrix/bom-tariff-analysis-agent/commits)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991?logo=openai&logoColor=white)](https://platform.openai.com/)
+[![Data: USITC DataWeb](https://img.shields.io/badge/Data-USITC%20DataWeb-1f6feb)](https://dataweb.usitc.gov/)
 
 Connect your product’s BOM and purchase costs with tariff rates and import data
 to quantify cost pressure, pinpoint exposed parts, and identify sourcing actions
@@ -14,25 +15,25 @@ targets in a clear decision brief.
 ## Workflow
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 340}} }%%
 flowchart TB
-    subgraph S1[" "]
-        direction LR
-        A["1. Classify"] -.- AD["Load and flatten the BOM<br/>Identify HTS codes for purchased parts"]
-    end
-    subgraph S2[" "]
-        direction LR
-        B["2. Enrich"] -.- BD["Look up tariff rates<br/>Find top 5 import origins per code via DataWeb"]
-    end
-    subgraph S3[" "]
-        direction LR
-        C["3. Evaluate & recommend"] -.- CD["Compare duty, savings, and break-even prices<br/>Prioritize sourcing actions in a decision brief"]
-    end
-    S1 --> S2 --> S3
-    style S1 fill:none,stroke:none
-    style S2 fill:none,stroke:none
-    style S3 fill:none,stroke:none
-    classDef detail fill:none,stroke:none,text-align:left
-    class AD,BD,CD detail
+    IN[/"`BOM.csv
+    quantities · unit prices · origins`"/]
+    S1["`**1 · Classify**
+    flatten the BOM, identify HTS codes for purchased parts`"]
+    S2["`**2 · Enrich**
+    look up tariff rates and the top 5 import origins per code`"]
+    S3["`**3 · Evaluate & recommend**
+    compare duty, savings, and break-even prices; rank actions`"]
+    OUT[/"`Decision brief
+    exposure · opportunities · actions`"/]
+
+    IN --> S1 --> S2 --> S3 --> OUT
+
+    classDef step stroke:#4c8eda,stroke-width:1.5px
+    classDef io stroke-dasharray:4 3
+    class S1,S2,S3 step
+    class IN,OUT io
 ```
 
 Import origins are ranked by U.S. customs value in USD over the last 12 complete
