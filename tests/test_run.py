@@ -8,9 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.classify.classifier import Selection
+from src.classify.classifier import HeadingSelection, Selection
 from src.config import HTS_JSON, ROOT
 from src.hts.index import HtsIndex
+from src.hts.render import render
 from src.run import MAX_TURNS, BomAnalysis, run
 
 
@@ -84,7 +85,15 @@ class DemoClient:
         prompt = kwargs["input"][0]["content"]
         code = "7318.16.00.60" if "DEMO-NUT" in prompt else "7318.21.00.30"
         index = HtsIndex.load(HTS_JSON)
-        choice = next(i for i, row in enumerate(index.candidates) if row.htsno == code)
+        if kwargs["text_format"] is HeadingSelection:
+            headings = [row for row in index.records if row.digits == 4]
+            return SimpleNamespace(status="completed", usage=fake_usage(1000, 100),
+                                   output_parsed=HeadingSelection(
+                                       choices=[next(i for i, row in enumerate(headings) if row.htsno == "7318")],
+                                       reason="matched", rationale="Fastener", missing_attributes=[],
+                                   ))
+        branch = render(index, headings=["7318"], include_parents=True)
+        choice = next(i for i, row in enumerate(branch.candidates) if row.htsno == code)
         return SimpleNamespace(status="completed", usage=fake_usage(1000, 100), output_parsed=Selection(
             choice=choice, evidence=index.get(code).description,
         ))
@@ -95,6 +104,97 @@ def execute(client, tmp_path):
         ROOT / "examples/two_parts.csv", 1, tmp_path,
         client=client, country_discovery=fake_discovery,
     ))
+
+
+def test_observed_run_preserves_outputs_and_emits_results_before_brief(tmp_path, capsys):
+    expected = execute(DemoClient(), tmp_path / "plain")
+    capsys.readouterr()
+    observed = []
+    actual = asyncio.run(run(
+        ROOT / "examples/two_parts.csv", 1, tmp_path / "observed",
+        client=DemoClient(), country_discovery=fake_discovery, on_event=observed.append,
+    ))
+    assert actual == expected
+    assert capsys.readouterr().out == ""
+    for name in ("brief.md", "brief_data.json", "scenarios.jsonl", "classified.csv", "components.csv"):
+        assert (tmp_path / "plain" / name).read_bytes() == (tmp_path / "observed" / name).read_bytes()
+    assert [event.sequence for event in observed] == list(range(1, len(observed) + 1))
+    names = [event.name for event in observed]
+    assert names.index("business_results") < names.index("brief")
+    assert [event.data["functions"] for event in observed
+            if event.name == "agent" and event.status == "completed"] == [
+        ["classify_bom"], ["find_top_import_countries"], ["calculate_duty_scenarios"], [],
+    ]
+    assert observed[-1].name == "run" and observed[-1].status == "completed"
+    assert len([event for event in observed if event.name == "usage" and event.status == "cache_hit"]) == 2
+    starts = {event.action_id for event in observed if event.status == "started"}
+    ends = [event.action_id for event in observed if event.action_id and event.status != "started"]
+    assert starts == set(ends) and len(starts) == len(ends)
+
+
+def test_reused_tools_do_not_duplicate_part_events(tmp_path):
+    observed = []
+    asyncio.run(run(
+        ROOT / "examples/two_parts.csv", 1, tmp_path,
+        client=DemoClient(["classify_bom", "classify_bom", "find_top_import_countries",
+                           "calculate_duty_scenarios", None]),
+        country_discovery=fake_discovery, on_event=observed.append,
+    ))
+    assert len([event for event in observed if event.name == "classification" and event.status == "started"]) == 2
+    assert any(event.name == "tool" and event.data["reused"] for event in observed)
+
+
+def test_cancellation_closes_actions_and_finalizes_usage(tmp_path):
+    observed = []
+
+    async def exercise():
+        client = DemoClient()
+        entered = asyncio.Event()
+
+        async def wait_for_model(**kwargs):
+            entered.set()
+            await asyncio.Event().wait()
+
+        client.parse = wait_for_model
+        task = asyncio.create_task(run(
+            ROOT / "examples/two_parts.csv", 1, tmp_path, client=client,
+            country_discovery=fake_discovery, on_event=observed.append,
+        ))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(exercise())
+    report = json.loads((tmp_path / "token_usage.json").read_text())
+    assert report["status"] == "cancelled"
+    assert report["events"][-1]["status"] == "cancelled"
+    assert observed[-1].name == "run" and observed[-1].status == "cancelled"
+    starts = {event.action_id for event in observed if event.status == "started"}
+    ends = {event.action_id for event in observed if event.action_id and event.status != "started"}
+    assert starts == ends
+    assert not (tmp_path / "brief.md").exists()
+
+
+def test_brief_failure_keeps_business_results(tmp_path):
+    observed = []
+    client = DemoClient()
+    original = client.create
+
+    async def fail_after_tools(**kwargs):
+        if len(client.requests) == 3:
+            raise RuntimeError("brief unavailable")
+        return await original(**kwargs)
+
+    client.create = fail_after_tools
+    with pytest.raises(RuntimeError, match="brief unavailable"):
+        asyncio.run(run(
+            ROOT / "examples/two_parts.csv", 1, tmp_path, client=client,
+            country_discovery=fake_discovery, on_event=observed.append,
+        ))
+    assert any(event.name == "business_results" for event in observed)
+    assert (tmp_path / "brief_data.json").exists()
+    assert observed[-1].name == "run" and observed[-1].status == "failed"
 
 
 @pytest.mark.parametrize("fails", [False, True])
@@ -116,12 +216,13 @@ def test_owned_client_closes_after_success_or_failure(tmp_path, monkeypatch, fai
 def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     client = DemoClient()
     brief = execute(client, tmp_path)
-    assert client.classifier_calls == 2
+    assert client.classifier_calls == 4
     assert len(client.requests) == 4
     expected_tools = {
         "classify_bom", "find_top_import_countries", "calculate_duty_scenarios",
     }
     for request in client.requests:
+        assert request["max_output_tokens"] == 8192
         assert {tool["name"] for tool in request["tools"]} == expected_tools
         assert request["tool_choice"] == "auto"
         assert request["parallel_tool_calls"] is False
@@ -153,12 +254,12 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert "Token totals [run]" in output
     usage = json.loads((tmp_path / "token_usage.json").read_text())
     assert usage["status"] == "completed"
-    assert usage["totals"]["total_tokens"] == 2680
-    assert usage["stages"]["classification"]["total_tokens"] == 2200
+    assert usage["totals"]["total_tokens"] == 4880
+    assert usage["stages"]["classification"]["total_tokens"] == 4400
     assert usage["stages"]["agent"]["total_tokens"] == 480
-    assert usage["totals"]["api_calls"] == 6
+    assert usage["totals"]["api_calls"] == 8
     assert [event["label"] for event in usage["events"]] == [
-        "turn-1", "DEMO-NUT", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
+        "turn-1", "DEMO-NUT", "DEMO-NUT", "DEMO-WASHER", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
     ]
 
     replay = DemoClient()
@@ -189,7 +290,7 @@ def test_agent_recovers_from_out_of_order_tools_and_early_brief(tmp_path):
     assert "before writing the brief" in client.requests[2]["input"][-1]["content"]
     calculator_error = json.loads(client.requests[4]["input"][-1]["output"])
     assert "find_top_import_countries" in calculator_error["error"]
-    assert client.classifier_calls == 2
+    assert client.classifier_calls == 4
     assert (tmp_path / "brief.md").exists()
 
 
@@ -206,7 +307,7 @@ def test_repeated_tools_reuse_completed_work(tmp_path):
     )
     first = asyncio.run(analysis.classify_bom())
     assert asyncio.run(analysis.classify_bom()) == first == {"status": "success"}
-    assert client.classifier_calls == 2
+    assert client.classifier_calls == 4
 
     assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
     rankings = analysis.country_rankings
@@ -293,17 +394,19 @@ def test_non_finishing_agent_is_bounded_and_does_not_write_brief(tmp_path, seque
     assert usage["stages"]["agent"]["api_calls"] == MAX_TURNS
 
 
-def test_incomplete_response_does_not_execute_tool(tmp_path):
+@pytest.mark.parametrize("reason", [None, "max_output_tokens", "content_filter"])
+def test_incomplete_response_does_not_execute_tool(tmp_path, reason):
     client = DemoClient()
     original = client.create
 
     async def create(**kwargs):
         response = await original(**kwargs)
         response.status = "incomplete"
+        response.incomplete_details = SimpleNamespace(reason=reason) if reason else None
         return response
 
     client.create = create
-    with pytest.raises(RuntimeError, match="Incomplete model response"):
+    with pytest.raises(RuntimeError, match=f"reason={reason or 'unknown'}, max_output_tokens=8192"):
         execute(client, tmp_path)
     assert client.classifier_calls == 0
     assert not (tmp_path / "brief.md").exists()

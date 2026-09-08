@@ -10,7 +10,7 @@ import csv
 import pytest
 
 from src.bom.flatten import Bom, ValidationError
-from src.config import BOM_CSV
+from src.config import BOM_CSV, ROOT
 
 
 @pytest.fixture(scope="module")
@@ -23,6 +23,18 @@ def test_leaves_reconcile_to_root(bom):
     stats = bom.reconcile()
     assert stats["total_usd"] == 1348.83
     assert bom.root.extended_cost_usd == pytest.approx(1348.83)
+
+
+def test_five_parts_sample_reconciles():
+    from scripts.diagnose_bom import CHECKS
+
+    sample = Bom.load(ROOT / "examples/five_parts.csv")
+    components = sample.components()
+    assert len(components) == 2
+    assert sum(c.extended_cost_usd for c in components) == pytest.approx(34.00)
+    assert {name: check(sample) for name, check in CHECKS.items()} == {
+        name: [] for name in CHECKS
+    }
 
 
 def test_quantities_are_absolute_not_per_parent(bom):
