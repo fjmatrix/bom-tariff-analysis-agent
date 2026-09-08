@@ -1,13 +1,14 @@
 """Calculate decision-brief facts from the BOM and supported duty scenarios."""
 
 from src.duty.rates import duty_rate
+from src.cost_pressure import build_cost_pressure, classify_cost_pressure
 
 
 def percent(numerator, denominator):
     return round(100 * numerator / denominator, 4) if denominator > 0 else None
 
 
-def build_brief_data(components, classifications, scenarios, index, country_rankings):
+def build_brief_data(components, classifications, scenarios, index, country_rankings, *, bom=None):
     total_cost = sum(part.extended_cost_usd for part in components)
     classified = {row.reference: row for row in classifications}
     exposures = []
@@ -68,13 +69,20 @@ def build_brief_data(components, classifications, scenarios, index, country_rank
     savings_total = round(sum(row["duty_savings_per_finished_product_usd"] for row in opportunities), 2)
     # Country discovery uses the same period for every HTS lookup, including failures.
     ranking = next(iter(country_rankings.values()), None)
+    cost_pressure = build_cost_pressure(components, bom)
+    exposure_pct = percent(current_total, total_cost) if exposures else None
+    trend = cost_pressure["summary"]["input_price_trend"]
+    tariff, pressure = classify_cost_pressure(exposure_pct, trend)
     return {
         "currency": "USD",
         "basis": "One finished product; purchased parts imported separately.",
         "summary": {
+            "cost_pressure": pressure,
+            "tariff_exposure": tariff,
+            "input_price_trend": trend,
             "bom_cost_per_finished_product_usd": round(total_cost, 2),
             "known_current_duty_per_finished_product_usd": current_total if exposures else None,
-            "known_exposure_pct_total_bom_cost": percent(current_total, total_cost) if exposures else None,
+            "known_exposure_pct_total_bom_cost": exposure_pct,
             "potential_savings_per_finished_product_usd": savings_total if exposures else None,
             "potentially_addressable_pct_known_exposure": percent(savings_total, current_total),
             "covered_parts": len(exposures), "total_parts": len(components),
@@ -82,6 +90,7 @@ def build_brief_data(components, classifications, scenarios, index, country_rank
             "covered_bom_cost_pct": percent(covered_cost, total_cost),
             "exposure_is_partial": bool(unresolved),
         },
+        "index_implied_cost_pressure": cost_pressure,
         "product_exposure": sorted(exposures, key=lambda row: (
             -row["current_duty_per_finished_product_usd"], row["reference"],
         )),
@@ -104,3 +113,70 @@ def build_brief_data(components, classifications, scenarios, index, country_rank
                            "Savings use unchanged BOM prices; break-even is a quote ceiling, "
                            "not an available supplier price. Tied savings are counted once per part.",
     }
+
+
+def cost_pressure_markdown(brief_data):
+    """Render the calculated headline without relying on model arithmetic."""
+    summary = brief_data["summary"]
+    data = brief_data["index_implied_cost_pressure"]
+    totals = data["summary"]
+    pressure = totals["total_index_implied_cost_pressure"]
+    change = totals["weighted_index_change_pct"]
+    amount = f"${pressure:,.2f}" if pressure is not None else "N/A"
+    weighted = f"{100 * change:+.2f}%" if change is not None else "N/A"
+    partial = " (partial coverage)" if summary["exposure_is_partial"] else ""
+    markdown = (
+        f"**Cost pressure:** {summary['cost_pressure']}  \n"
+        f"**Tariff exposure:** {summary['tariff_exposure']}{partial}  \n"
+        f"**Input price trend:** {summary['input_price_trend']}\n\n"
+        f"- Valid baseline spend: ${totals['total_baseline_spend']:,.2f}\n"
+        f"- Index-implied cost pressure: {amount}\n"
+        f"- Weighted input-price change: {weighted}\n\n"
+        f"USD per finished product. Index/spend coverage: "
+        f"{totals['items_with_valid_spend_and_index']}/{len(data['items'])} items.\n\n"
+        f"> {data['note']}\n\n"
+    )
+    headings_by_parent = {}
+    for row in data["headings"]:
+        headings_by_parent.setdefault(row["parent_line"], []).append(row)
+    leaf_parents = {item.get("parent_line") for item in data["items"]}
+    rollups = []
+    for product in sorted(data["products"], key=lambda row: row["line"]):
+        rollups.append(product)
+        parent = product["line"]
+        children = headings_by_parent.get(parent, [])
+        # Skip wrappers only when their sole child contains the entire subtree.
+        while len(children) == 1 and parent not in leaf_parents:
+            parent = children[0]["line"]
+            children = headings_by_parent.get(parent, [])
+        rollups.extend(sorted(children, key=lambda row: row["line"]))
+    if rollups:
+        markdown += (
+            "**Input cost pressure by product and heading**\n\n"
+            "| Product / heading | Valid baseline spend | Index-implied cost pressure | "
+            "Weighted index change | Valid items / total |\n"
+            "|---|---:|---:|---:|---:|\n"
+        )
+        for row in rollups:
+            label = f"{row['component_reference']} — {row['name']}"
+            label = label.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+            kind = "Product" if row["parent_line"] is None else "Heading"
+            pressure = row["total_index_implied_cost_pressure"]
+            change = row["weighted_index_change_pct"]
+            amount = f"${pressure:,.2f}" if pressure is not None else "N/A"
+            weighted = f"{100 * change:+.2f}%" if change is not None else "N/A"
+            count = row["items_with_index"] + row["items_without_index"]
+            markdown += (
+                f"| {kind}: {label} | ${row['total_baseline_spend']:,.2f} | "
+                f"{amount} | {weighted} | {row['items_with_valid_spend_and_index']}/{count} |\n"
+            )
+        markdown += (
+            "\nOnly items with valid spend and index data contribute to these totals. "
+            "Weighted index change = index-implied cost pressure / valid baseline spend; "
+            "N/A when valid baseline spend is zero. "
+            "Only the first assembly breakdown is shown; single-child wrappers are skipped. "
+            "Direct purchased parts remain included in the product total. "
+            "Full hierarchy details are available in brief_data.json. "
+            "Products include their headings; overlapping rows must not be added together.\n\n"
+        )
+    return markdown
