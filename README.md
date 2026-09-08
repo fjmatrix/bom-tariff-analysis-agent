@@ -1,23 +1,44 @@
 # BOM Tariff Exposure Agent
 
-Turn a priced bill of materials (BOM) into HTS duty estimates, sourcing comparisons,
-and a decision brief with modeled savings and break-even purchase prices.
+![BOM tariff analysis showing sourcing opportunities and the completed workflow](docs/assets/cover.png)
+
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991?logo=openai&logoColor=white)](https://platform.openai.com/)
+[![Data: USITC DataWeb](https://img.shields.io/badge/Data-USITC%20DataWeb-1f6feb)](https://dataweb.usitc.gov/)
+
+Connect your product’s BOM and purchase costs with tariff rates and import data
+to quantify cost pressure, pinpoint exposed parts, and identify sourcing actions
+that protect margin. Compare origins, estimate savings, and set purchase-price
+targets in a clear decision brief.
 
 ## Workflow
 
 ```mermaid
-flowchart TD
-    A[Receive priced BOM] --> B[Flatten assemblies into purchased parts]
-    B --> C[Classify parts and identify HTS codes]
-    C --> D[Query DataWeb for top 5 import origins per HTS code]
-    D --> E[Compare duty for current and alternative origins]
-    E --> F[Rank savings and calculate break-even purchase prices]
-    F --> G[Write decision brief and supporting data]
+%%{init: {"flowchart": {"wrappingWidth": 340}} }%%
+flowchart TB
+    IN[/"`BOM.csv
+    quantities · unit prices · origins`"/]
+    S1["`**1 · Classify**
+    flatten the BOM, identify HTS codes for purchased parts`"]
+    S2["`**2 · Enrich**
+    look up tariff rates and the top 5 import origins per code`"]
+    S3["`**3 · Evaluate & recommend**
+    compare duty, savings, and break-even prices; rank actions`"]
+    OUT[/"`Decision brief
+    exposure · opportunities · actions`"/]
+
+    IN --> S1 --> S2 --> S3 --> OUT
+
+    classDef step stroke:#4c8eda,stroke-width:1.5px
+    classDef io stroke-dasharray:4 3
+    class S1,S2,S3 step
+    class IN,OUT io
 ```
 
-Classification uses an LLM and caches validated selections. DataWeb ranks origins
-by U.S. import customs value in USD over the last 12 complete months—not physical
-quantity. Python calculates duty and savings; the model writes the brief.
+Import origins are ranked by U.S. customs value in USD over the last 12 complete
+months. Python calculates duty and savings; the model classifies parts and writes
+the brief.
 
 ## Run
 
