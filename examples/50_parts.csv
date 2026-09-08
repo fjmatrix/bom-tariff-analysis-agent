@@ -1,0 +1,51 @@
+level,component_reference,component_name,component_quantity,parent_bom_reference,parent_bom_name,has_child_bom,unit_price_usd,country_of_origin
+0,M00653,EVO-M [M0 use],1.00,,,True,783.95,BE
+1,M00206,EVO-M - Main Box 1/2,1.00,M00653,EVO-M [M0 use],True,707.95,BE
+2,M00148,EVO - Control Unit,1.00,M00206,EVO-M - Main Box 1/2,True,362.17,BE
+3,M00367,CNC USB Controller Mk3/4,1.00,M00148,EVO - Control Unit,False,125.00,SI
+3,M00368,CNC USB Controller license,1.00,M00148,EVO - Control Unit,False,45.00,SI
+3,M00663,MicroSD 32GB Samsung Evo+,1.00,M00148,EVO - Control Unit,False,7.00,KR
+3,M00750,SMPS 360W 24V 15A (CNC Evo),1.00,M00148,EVO - Control Unit,False,30.00,CN
+3,M00073,"Axial Fan 24V 60x60mm, panel mount",1.00,M00148,EVO - Control Unit,False,5.00,CN
+3,M00865,Wago 3 connectors,3.00,M00148,EVO - Control Unit,False,0.55,DE
+3,M01715,ISO 7380 M3x4 Black Screw,24.00,M00148,EVO - Control Unit,False,0.03,CN
+3,M00739,Raspberry Pi 4B 2G,1.00,M00148,EVO - Control Unit,False,45.00,GB
+3,M00949,Motor Driver 2DM542-N - EVO,4.00,M00148,EVO - Control Unit,False,22.00,CN
+3,M00620,EVO - Limit Switches PCB Assembly,1.00,M00148,EVO - Control Unit,True,14.80,BE
+4,M00714,PCB Custom for CNC Limit Switches,1.00,M00620,EVO - Limit Switches PCB Assembly,False,6.00,CN
+4,M00841,"ALL - Tapped XLR 3 pole female panel, vertical PCB",4.00,M00620,EVO - Limit Switches PCB Assembly,True,2.20,BE
+5,M00917,"XLR 3 pole female panel, vertical PCB",4.00,M00841,"ALL - Tapped XLR 3 pole female panel, vertical PCB",False,2.20,CN
+2,M00174,EVO - Mechanical Elements Box,1.00,M00206,EVO-M - Main Box 1/2,True,75.84,BE
+3,M00834,T8 Lead Screw 250mm,1.00,M00174,EVO - Mechanical Elements Box,False,5.00,CN
+3,M00175,EVO - Miscellaneous Components Bag,1.00,M00174,EVO - Mechanical Elements Box,True,5.20,BE
+4,M00076,Ball Bearing 608-2RS 8x22x7mm,2.00,M00175,EVO - Miscellaneous Components Bag,False,0.60,CN
+4,M00517,Flexible Motor Coupler D20L25 - 6.35mm to 8mm,1.00,M00175,EVO - Miscellaneous Components Bag,False,4.00,CN
+3,M00176,EVO - Mounting Tools Bag,1.00,M00174,EVO - Mechanical Elements Box,True,1.84,BE
+4,M00023,Allen Key 2mm,1.00,M00176,EVO - Mounting Tools Bag,False,0.40,TW
+4,M00806,Spanner 7mm,1.00,M00176,EVO - Mounting Tools Bag,False,1.20,TW
+4,M01676,EVO - Acrylic Parts - Assembly Gauge,1.00,M00176,EVO - Mounting Tools Bag,True,0.24,BE
+5,M00716,"PMMA Sheet 3mm 600x400mm, Light Blue",0.02,M01676,EVO - Acrylic Parts - Assembly Gauge,False,12.00,DE
+3,M00198,EVO - V-Wheels Bag - M5,1.00,M00174,EVO - Mechanical Elements Box,True,63.80,BE
+4,M00882,Wheel with Bearings for V-slot Profile - Type B,29.00,M00198,EVO - V-Wheels Bag - M5,False,2.20,CN
+2,M00195,EVO - Steel Parts Box,1.00,M00206,EVO-M - Main Box 1/2,True,64.00,BE
+3,M00187,CNC Evo - Steel Parts - Foot,4.00,M00195,EVO - Steel Parts Box,False,5.00,BE
+3,M00188,CNC Evo - Steel Parts - Gantry,2.00,M00195,EVO - Steel Parts Box,False,22.00,BE
+2,M00215,EVO/PRO - Interface Unit,1.00,M00206,EVO-M - Main Box 1/2,True,57.24,BE
+3,M00011,"7"" LCD Touch Screen 1024x600 TFT",1.00,M00215,EVO/PRO - Interface Unit,False,45.00,CN
+3,M01715,ISO 7380 M3x4 Black Screw,8.00,M00215,EVO/PRO - Interface Unit,False,0.03,CN
+3,M00716,"PMMA Sheet 3mm 600x400mm, Light Blue",1.00,M00215,EVO/PRO - Interface Unit,False,12.00,DE
+2,M00204,EVO-M - Electronic Components box,1.00,M00206,EVO-M - Main Box 1/2,True,148.70,BE
+3,M00696,ALL - Nema23 Motor,4.00,M00204,EVO-M - Electronic Components box,True,28.00,BE
+4,M00697,Nema23 Stepper Motor 5A 6.35mm Shaft,4.00,M00696,ALL - Nema23 Motor,False,28.00,CN
+3,M00482,Emergency Stop Button 1NC,1.00,M00204,EVO-M - Electronic Components box,False,6.00,CN
+3,M01078,Touch Probe Z Device (3-pins model),1.00,M00204,EVO-M - Electronic Components box,False,12.00,CN
+3,M00848,USB Key 2Gb,1.00,M00204,EVO-M - Electronic Components box,False,2.50,CN
+3,M01066,EVO-M - Motor Cables,1.00,M00204,EVO-M - Electronic Components box,True,11.00,BE
+4,M00208,EVO-M - BELRAM lot of Motor Cables,1.00,M01066,EVO-M - Motor Cables,True,11.00,BE
+5,M00669,"Motor Cable X 330cm, Red (Evo-M)",1.00,M00208,EVO-M - BELRAM lot of Motor Cables,False,11.00,BE
+3,M00205,EVO-M - Timing Belt Bag - GT2,1.00,M00204,EVO-M - Electronic Components box,True,5.20,BE
+4,M00532,GT2 Timing Belt 6mm 1330 mm,2.00,M00205,EVO-M - Timing Belt Bag - GT2,False,2.60,CN
+1,M00225,EVO/PRO-M - Structure Box 2/2,1.00,M00653,EVO-M [M0 use],True,76.00,BE
+2,M00055,Alu Profile V-3030 (240mm) [1x M6 thread on BOTH sides],2.00,M00225,EVO/PRO-M - Structure Box 2/2,False,4.00,DE
+2,M00035,Alu Profile I-6030 (1170 mm),3.00,M00225,EVO/PRO-M - Structure Box 2/2,False,18.00,DE
+2,M00374,Cable Chain 900mm (Evo/Pro-S/M/L),2.00,M00225,EVO/PRO-M - Structure Box 2/2,False,7.00,CN
