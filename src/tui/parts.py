@@ -66,7 +66,7 @@ class PartsView(Vertical):
             for reference, row in self.classifications.items():
                 if (row["code"] or "").replace(".", "") == code:
                     self.statuses[reference] = {
-                        "started": "◌ Finding origins", "completed": "✓ Origins found",
+                        "started": "◌ Ranking origins", "completed": "✓ Origins found",
                         "failed": "! Lookup failed", "skipped": "! Lookup skipped",
                         "cancelled": "– Cancelled",
                     }[event.status]

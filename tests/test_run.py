@@ -112,6 +112,10 @@ def test_observed_run_preserves_outputs_and_emits_results_before_brief(tmp_path,
     assert [event.sequence for event in observed] == list(range(1, len(observed) + 1))
     names = [event.name for event in observed]
     assert names.index("business_results") < names.index("brief")
+    assert [event.data["functions"] for event in observed
+            if event.name == "agent" and event.status == "completed"] == [
+        ["classify_bom"], ["find_top_import_countries"], ["calculate_duty_scenarios"], [],
+    ]
     assert observed[-1].name == "run" and observed[-1].status == "completed"
     assert len([event for event in observed if event.name == "usage" and event.status == "cache_hit"]) == 2
     starts = {event.action_id for event in observed if event.status == "started"}
@@ -209,6 +213,7 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
         "classify_bom", "find_top_import_countries", "calculate_duty_scenarios",
     }
     for request in client.requests:
+        assert request["max_output_tokens"] == 8192
         assert {tool["name"] for tool in request["tools"]} == expected_tools
         assert request["tool_choice"] == "auto"
         assert request["parallel_tool_calls"] is False
@@ -380,17 +385,19 @@ def test_non_finishing_agent_is_bounded_and_does_not_write_brief(tmp_path, seque
     assert usage["stages"]["agent"]["api_calls"] == MAX_TURNS
 
 
-def test_incomplete_response_does_not_execute_tool(tmp_path):
+@pytest.mark.parametrize("reason", [None, "max_output_tokens", "content_filter"])
+def test_incomplete_response_does_not_execute_tool(tmp_path, reason):
     client = DemoClient()
     original = client.create
 
     async def create(**kwargs):
         response = await original(**kwargs)
         response.status = "incomplete"
+        response.incomplete_details = SimpleNamespace(reason=reason) if reason else None
         return response
 
     client.create = create
-    with pytest.raises(RuntimeError, match="Incomplete model response"):
+    with pytest.raises(RuntimeError, match=f"reason={reason or 'unknown'}, max_output_tokens=8192"):
         execute(client, tmp_path)
     assert client.classifier_calls == 0
     assert not (tmp_path / "brief.md").exists()

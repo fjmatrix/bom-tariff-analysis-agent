@@ -1,0 +1,148 @@
+component_reference,component_name,assembly_context,heading,status,note,extended_cost_usd,country_of_origin
+M00367,CNC USB Controller Mk3/4,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8537,ok,numerical control for a machine tool,125.00,SI
+M00697,Nema23 Stepper Motor 5A 6.35mm Shaft,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > ALL - Nema23 Motor,8501,ok,stepper motor,112.00,CN
+M00949,Motor Driver 2DM542-N - EVO,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8504,ok,static converters / power supply,88.00,CN
+M00056,Alu Profile V-6060 (1230 mm) [4x M6 threads on BOTH sides],EVO-M [M0 use] > EVO/PRO-M - Structure Box 2/2,7604,ok,aluminum profiles,70.00,DE
+M00882,Wheel with Bearings for V-slot Profile - Type B,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - V-Wheels Bag - M5,8482,ok,ball bearings / V-wheel on bearings,63.80,CN
+M00035,Alu Profile I-6030 (1170 mm),EVO-M [M0 use] > EVO/PRO-M - Structure Box 2/2,7604,ok,aluminum profiles,54.00,DE
+M00368,CNC USB Controller license,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,-none-,none,software licence; not imported merchandise,45.00,SI
+M00739,Raspberry Pi 4B 2G,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8471,ok,single-board computer,45.00,GB
+M00011,"7"" LCD Touch Screen 1024x600 TFT",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8524,ok,LCD touch module,45.00,CN
+M00188,CNC Evo - Steel Parts - Gantry,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),44.00,BE
+M00750,SMPS 360W 24V 15A (CNC Evo),EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8504,ok,static converters / power supply,30.00,CN
+M00057,Alu Profile V-6060 (830 mm) [4x M6 threads on BOTH sides],EVO-M [M0 use] > EVO/PRO-M - Structure Box 2/2,7604,ok,aluminum profiles,25.00,DE
+M00187,CNC Evo - Steel Parts - Foot,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),20.00,BE
+M00039,Alu Profile I-6030 (620 mm),EVO-M [M0 use] > EVO/PRO-M - Structure Box 2/2,7604,ok,aluminum profiles,20.00,DE
+M00556,I-Type Sliding Nut M6,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - I-Type Sliding Nut Bag - M6,7318,ok,nuts,19.50,CN
+M00218,CNC Evo/Pro - Steel Parts - Control Unit Base,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8538,gap,8538.10 base/cabinet for a 8537 good,18.00,BE
+M00918,"XLR 4 pole female panel M3, Pre-wired 18cm breakout",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,18.00,CN
+M00716,"PMMA Sheet 3mm 600x400mm, Light Blue",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag > EVO - Acrylic Parts - Assembly Gauge,3920,ok,PMMA sheet,16.68,DE
+M00219,CNC Evo/Pro - Steel Parts - Control Unit Cover,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8538,gap,8538.10 base/cabinet for a 8537 good,16.00,BE
+M00182,CNC Evo - Steel Parts - AMB Interface,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),14.00,BE
+M00191,CNC Evo - Steel Parts - X-axis Carrier Back,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),14.00,BE
+M00192,CNC Evo - Steel Parts - X-axis Carrier Front,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),14.00,BE
+M00374,Cable Chain 900mm (Evo/Pro-S/M/L),EVO-M [M0 use] > EVO/PRO-M - Structure Box 2/2,3926,ok,articles of plastics,14.00,CN
+M00063,Angle Bracket 60 B-Type Groove 8,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box,7616,ok,"aluminum bracket; zinc die-cast -> 7907, mounting -> 8302",12.00,CN
+M00700,Numeric Keypad 34 Keys,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8471,ok,"keypad, input unit",12.00,CN
+M01078,Touch Probe Z Device (3-pins model),EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box,9031,ok,Z touch probe; measuring/checking instrument,12.00,CN
+M00682,"Motor Cable Z 360cm, Blue (Evo-M)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables > EVO-M - BELRAM lot of Motor Cables,8544,ok,cable sets fitted with connectors,12.00,BE
+M00678,"Motor Cable Y2 350cm, Yellow (Evo-M)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables > EVO-M - BELRAM lot of Motor Cables,8544,ok,cable sets fitted with connectors,11.50,BE
+M00669,"Motor Cable X 330cm, Red (Evo-M)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables > EVO-M - BELRAM lot of Motor Cables,8544,ok,cable sets fitted with connectors,11.00,BE
+M00649,"Mechanical Switch Cable Z- 370cm, Blue (Evo-M)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Mechanical Switch Cables,8544,ok,cable sets fitted with connectors,11.00,BE
+M00852,"USB-A male to A female panel mount, 30cm",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,10.50,CN
+M00559,IDC Adapter PCB & Ribbon - 10-pin - 90°,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,10.00,CN
+M00194,CNC Evo - Steel Parts - Z-axis Plate Top,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),10.00,BE
+M00193,CNC Evo - Steel Parts - Z-axis Plate Bottom,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Steel Parts Box,8466,ok,part of the machine tool (8465/8459),10.00,BE
+M00189,CNC Evo/Pro - Steel Parts - Interface Unit Base,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8538,gap,8538.10 base/cabinet for a 8537 good,10.00,BE
+M00644,"Mechanical Switch Cable X- 330cm, Red (Evo-M)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Mechanical Switch Cables,8544,ok,cable sets fitted with connectors,10.00,BE
+M00183,CNC Evo - Steel Parts - Belt Tensioner,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,8466,ok,part of the machine tool (8465/8459),9.00,BE
+M00481,Eccentric Spacer M5 - 6mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Eccentric Spacer Bag - M5x6,7326,gap?,machined eccentric bushing; as accessory -> 8466,9.00,CN
+M00190,CNC Evo/Pro - Steel Parts - Interface Unit Cover,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8538,gap,8538.10 base/cabinet for a 8537 good,9.00,BE
+M00917,"XLR 3 pole female panel, vertical PCB","EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit > EVO - Limit Switches PCB Assembly > ALL - Tapped XLR 3 pole female panel, vertical PCB",8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",8.80,CN
+M00055,Alu Profile V-3030 (240mm) [1x M6 thread on BOTH sides],EVO-M [M0 use] > EVO/PRO-M - Structure Box 2/2,7604,ok,aluminum profiles,8.00,DE
+M00531,"GT2 Pulley 20T, bore 6.35mm, belt width 6mm",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,8483,ok,pulley,7.50,CN
+M00663,MicroSD 32GB Samsung Evo+,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8523,ok,solid-state storage,7.00,KR
+M00674,"Motor Cable Y1 180cm, Green (Evo-M/L)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables > EVO-M - BELRAM lot of Motor Cables,8544,ok,cable sets fitted with connectors,7.00,BE
+M00647,"Mechanical Switch Cable Y2- 170cm, Yellow (Evo-S/M)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Mechanical Switch Cables,8544,ok,cable sets fitted with connectors,7.00,BE
+M00646,"Mechanical Switch Cable Y1- 140cm, Green (Evo-S/M/L)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Mechanical Switch Cables,8544,ok,cable sets fitted with connectors,6.50,BE
+M00537,"GX12 male 2 pins aux 45cm, panel mount (Safety Enclosure)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,6.40,CN
+M00853,USB-C 24V to 5V 3A converter,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8504,ok,static converters / power supply,6.00,CN
+M00542,HDMI (female) panel mount to micro HDMI (male),EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,6.00,CN
+M00714,PCB Custom for CNC Limit Switches,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit > EVO - Limit Switches PCB Assembly,8534,ok,bare printed circuit,6.00,CN
+M00718,PWM to Analog Voltage Converter 0-10V,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8504,ok,static converters / power supply,6.00,CN
+M00482,Emergency Stop Button 1NC,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box,8536,ok,"switches, fuse, inlet",6.00,CN
+M01704,DIN912 M6x16 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M6x16,7318,ok,socket/button-head screws,5.76,CN
+M00532,GT2 Timing Belt 6mm 1330 mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Timing Belt Bag - GT2,4010,ok,"rubber synchronous belts, 93 cm and 133 cm",5.20,CN
+M00502,"Ethernet RJ45 female 50cm, panel mount",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,5.00,CN
+M00073,"Axial Fan 24V 60x60mm, panel mount",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8414,ok,axial fan,5.00,CN
+M00834,T8 Lead Screw 250mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box,8483,ok,lead screw,5.00,CN
+M00184,CNC Evo - Steel Parts - Cable Chain Support X,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Acrylic & Steel Parts Bag,8466,ok,part of the machine tool (8465/8459),5.00,BE
+M00525,Foot M6X40 10PA - 30mm + Anti slip,"EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag > EVO - Foot M6X40 10PA D30 + Anti slip, Ready-to-Use",3926,ok,articles of plastics,4.80,CN
+M00800,Spacer M6x90mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M6x90,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",4.80,CN
+M00185,CNC Evo - Steel Parts - Cable Chain Support Y1 Left,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Acrylic & Steel Parts Bag,8466,ok,part of the machine tool (8465/8459),4.50,BE
+M00186,CNC Evo - Steel Parts - Cable Chain Support Y1 Right,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Acrylic & Steel Parts Bag,8466,ok,part of the machine tool (8465/8459),4.50,BE
+M00796,Spacer M5x30mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M5x30,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",4.40,CN
+M00540,"GX12 male 5 pins output 45cm, panel mount (VFD, Laser)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,4.00,CN
+M00517,Flexible Motor Coupler D20L25 - 6.35mm to 8mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,8483,ok,shaft coupling,4.00,CN
+M01077,"GX12 male 3 pins aux 45cm, panel mount (Probe)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,3.50,CN
+M00068,Anti-backlash Nut for T8 Screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,8483,ok,"anti-backlash nut, part of the screw drive",3.50,CN
+M00536,"GX12 male 2 pins aux 45cm, panel mount (Emergency Button)",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,3.20,CN
+M00651,Mechanical Switch SPDT-NO/NC,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO - Mechanical Switch Bag - SPDT-NO/NC,8536,ok,"switches, fuse, inlet",3.20,CN
+M00851,USB-A USB-B cable 30cm Elbow type,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8544,ok,cable sets fitted with connectors,3.00,CN
+M00543,HDMI Cable Male/Male 1.5m,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8544,ok,cable sets fitted with connectors,3.00,CN
+M00866,Wago 5 connectors,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",2.55,DE
+M00107,C14 Panel Mount 10A fuse,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"switches, fuse, inlet",2.50,CN
+M00554,I-Type Sliding Nut M4,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - I-Type Sliding Nut Bag - M4,7318,ok,nuts,2.50,CN
+M00793,Spacer M5x12mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M5x12,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",2.50,CN
+M01534,Male USB-A to Male USB-C Cable 150cm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8544,ok,cable sets fitted with connectors,2.50,CN
+M00007,"Power Cable C13 IEC to CEE 7/4, Schuko, 2m, 10 A, 250 V",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box,8544,ok,cable sets fitted with connectors,2.50,CN
+M00848,USB Key 2Gb,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box,8523,ok,solid-state storage,2.50,CN
+M00795,Spacer M5x19mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M5x19,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",2.40,CN
+M00632,Lock Nut DIN985 M5,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN985 Lock Nut Bag - M5,7318,ok,nuts,2.10,CN
+M00849,USB-A Micro USB Cable 1.5m,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8544,ok,cable sets fitted with connectors,2.00,CN
+M00533,GT2 Timing Belt 6mm 930 mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Timing Belt Bag - GT2,4010,ok,"rubber synchronous belts, 93 cm and 133 cm",1.90,CN
+M01718,DIN912 M6x12 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M6x12,7318,ok,socket/button-head screws,1.84,CN
+M00799,Spacer M5x9mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M5x9,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",1.76,CN
+M00865,Wago 3 connectors,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",1.65,DE
+M00380,Cable Chain TP15 End Connector (Female),EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,3926,ok,articles of plastics,1.60,CN
+M00381,Cable Chain TP15 End Connector (Male),EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,3926,ok,articles of plastics,1.60,CN
+M00446,DIN912 M5x85 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M5x85,7318,ok,socket/button-head screws,1.60,CN
+M00798,Spacer M5x6mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M5x6,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",1.60,CN
+M00744,"Rocker switch DPST, panel mount",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"switches, fuse, inlet",1.50,CN
+M00075,B-Type Square Nut M6,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,7318,ok,nuts,1.50,CN
+M00823,Square Plate - First CNC Test,EVO-M [M0 use] > EVO-M - Main Box 1/2,-desc-,desc,"material not stated: wood, MDF, acrylic and aluminum all differ",1.50,BE
+M00794,Spacer M5x15mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Spacer Bag - M5x15,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",1.40,CN
+M00660,Micro-Fit 3.0 Male Connector Housing,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > ALL - Nema23 Motor,8538,gap,8538.90.60 molded parts; bare connector housings,1.40,CN
+M00659,Micro-Fit 3.0 Female Connector Housing,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables,8538,gap,8538.90.60 molded parts; bare connector housings,1.40,CN
+M01697,DIN912 M4x12 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M4x12,7318,ok,socket/button-head screws,1.38,CN
+M00383,Cable Cover for I-type 6 Profile (2m),EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > ALL - Cable Cover for I-type 6 Profile 330mm,3916,gap?,extruded cover strip sold by the metre; as article -> 3926,1.36,CN
+M01694,DIN9021 Washer M6x18,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN9021 Washer Bag - M6x18,7318,ok,washers,1.32,CN
+M00801,Spanner 10mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,1.30,TW
+M00443,DIN912 M5x45 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M5x45,7318,ok,socket/button-head screws,1.21,CN
+M00553,Hex spacer M3x8 female/female,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7415,gap?,"M3 hex standoff; steel -> 7326, nylon -> 3926",1.20,CN
+M01071,Rubber foot M4 - Flat with Rivet,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,4016,ok,rubber foot,1.20,CN
+M00984,Female Banana Socket - Tab Termination,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",1.20,CN
+M00706,Nylon Cap HP-22,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,3926,ok,articles of plastics,1.20,CN
+M00076,Ball Bearing 608-2RS 8x22x7mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,8482,ok,ball bearings / V-wheel on bearings,1.20,CN
+M00806,Spanner 7mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,1.20,TW
+M00807,Spanner 8mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,1.20,TW
+M00662,Micro-Fit Male Crimp Terminal Contact,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > ALL - Nema23 Motor,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",1.12,CN
+M00661,Micro-Fit Female Crimp Terminal Contact,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",1.12,CN
+M00461,"Disc Magnet Ø 10mm, height 3mm",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,8505,ok,permanent magnet,1.05,CN
+M01716,DIN912 M6x10 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M6x10,7318,ok,socket/button-head screws,1.04,CN
+M01715,ISO 7380 M3x4 Black Screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7318,ok,socket/button-head screws,0.96,CN
+M01693,ISO 7380 M3x10 Black Screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - ISO7380 Black Screw Bag - M3x10,7318,ok,socket/button-head screws,0.96,CN
+M00441,DIN912 M5x35 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M5x35,7318,ok,socket/button-head screws,0.81,CN
+M00791,Screwless 4 Way PCB Terminal Block 3.5mm Pitch,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit > EVO - Limit Switches PCB Assembly,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",0.80,CN
+M00552,Hex spacer M3x30 female/female,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7415,gap?,"M3 hex standoff; steel -> 7326, nylon -> 3926",0.70,CN
+M00514,Fan cover 60mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8414,ok,"fan guard, part of the fan",0.60,CN
+M01636,Spacer M6x16,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit > INT - Fixation Bag,7326,gap?,"sleeve spacer; brass -> 7415, aluminum -> 7616, nylon -> 3926",0.60,CN
+M00629,Lock Nut DIN985 M4,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN985 Lock Nut Bag - M4,7318,ok,nuts,0.56,CN
+M00437,DIN912 M5x16 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M5x16,7318,ok,socket/button-head screws,0.54,CN
+M01729,"Dust Filter Mesh (""M""), 7cmx7cmx0.375mm, 0.5mm aperture",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8421,gap?,fan dust filter; as mesh by material -> 3926 or 7616,0.50,CN
+M00027,Allen Key 6mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,0.50,TW
+M00026,Allen Key 5mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,0.45,TW
+M00023,Allen Key 2mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,0.40,TW
+M00022,"Allen Key 2,5mm",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,0.40,TW
+M00024,Allen Key 3mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,0.40,TW
+M00025,Allen Key 4mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Mounting Tools Bag,8204,ok,spanners and hex keys,0.40,TW
+M00442,DIN912 M5x40 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M5x40,7318,ok,socket/button-head screws,0.40,CN
+M00790,Screw 2 Way PCB Terminal Block 5mm Pitch,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit > EVO - Limit Switches PCB Assembly,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",0.35,CN
+M00837,TFHC M4x35 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7318,ok,socket/button-head screws,0.30,CN
+M00830,Stop Ring M8,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,8487,gap?,shaft collar; as circlip -> 7318.29,0.30,CN
+M00530,Fuse T slow 10A,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"switches, fuse, inlet",0.25,CN
+M00842,Tooth Lock Washer DIN6798 M6 Type A Black,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,7318,ok,washers,0.24,CN
+M01748,DIN912 M6x25 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit > INT - Fixation Bag,7318,ok,socket/button-head screws,0.22,CN
+M01675,DIN912 M4x25 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M4x25 + M6x20,7318,ok,socket/button-head screws,0.21,CN
+M00407,Coloured Washer M3 - Blue,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7318,ok,washers,0.20,CN
+M00408,Coloured Washer M3 - Green,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7318,ok,washers,0.20,CN
+M00409,Coloured Washer M3 - Red,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7318,ok,washers,0.20,CN
+M00410,Coloured Washer M3 - Yellow,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,7318,ok,washers,0.20,CN
+M00419,DIN125A M6x12 Washer,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN125A Washer Bag - M6x12,7318,ok,washers,0.20,CN
+M00703,Nut DIN934 M6,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN934 Nut Bag - M6,7318,ok,nuts,0.16,CN
+M00389,Cable Tie 100mm x 2.5 mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,3926,ok,articles of plastics,0.13,CN
+M01070,Insulated Crimp Bootlace Ferrule,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Control Unit,8536,ok,"connectors, terminal blocks, crimp terminals, ferrule",0.12,CN
+M00887,Wood screw 4x25mm,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - Miscellaneous Components Bag,7318,ok,wood screw,0.12,CN
+M01698,DIN912 M4x16 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO/PRO - Interface Unit,7318,ok,socket/button-head screws,0.12,CN
+M00977,"Cable Tie 385mm x 4.8 mm, Green",EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO-M - Electronic Components box > EVO-M - Motor Cables,3926,ok,articles of plastics,0.10,CN
+M00451,DIN912 M6x20 Black screw,EVO-M [M0 use] > EVO-M - Main Box 1/2 > EVO - Mechanical Elements Box > EVO - DIN912 Black Screw Bag - M4x25 + M6x20,7318,ok,socket/button-head screws,0.09,CN

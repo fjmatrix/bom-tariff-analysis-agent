@@ -33,12 +33,11 @@ repository root:
 ```bash
 .venv/bin/python -m src.run \
   --bom examples/two_parts.csv \
-  --top-countries 5 \
   --out out/two_parts
 ```
 
-`--top-countries` controls how many origins DataWeb retains per HTS code and
-defaults to 5. Users no longer need to choose countries. Each part's current
+DataWeb retains the top 5 origins per HTS code automatically.
+Users no longer need to choose countries. Each part's current
 origin is always included even when it is outside the top results. `--bom`
 defaults to `BOM.csv`; `--out` defaults to `out`.
 
@@ -64,12 +63,11 @@ the optional extra in the existing environment:
 uv pip install --python .venv/bin/python -e '.[tui]'
 ```
 
-Then launch the interface with the same BOM, country-count, and output arguments:
+Then launch the interface with the same BOM and output arguments:
 
 ```bash
 .venv/bin/python -m src.tui \
   --bom examples/two_parts.csv \
-  --top-countries 5 \
   --out out/two_parts
 ```
 

@@ -71,9 +71,6 @@ def build_brief_data(components, classifications, scenarios, index, country_rank
     return {
         "currency": "USD",
         "basis": "One finished product; purchased parts imported separately.",
-        "annual_tariff_exposure_usd": None,
-        "annual_exposure_note": "Annual production volume is unavailable. Annual modeled "
-                                "exposure = unit exposure × annual finished-product volume.",
         "summary": {
             "bom_cost_per_finished_product_usd": round(total_cost, 2),
             "known_current_duty_per_finished_product_usd": current_total if exposures else None,
