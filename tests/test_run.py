@@ -8,9 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.classify.classifier import Selection
+from src.classify.classifier import HeadingSelection, Selection
 from src.config import HTS_JSON, ROOT
 from src.hts.index import HtsIndex
+from src.hts.render import render
 from src.run import MAX_TURNS, BomAnalysis, run
 
 
@@ -84,7 +85,15 @@ class DemoClient:
         prompt = kwargs["input"][0]["content"]
         code = "7318.16.00.60" if "DEMO-NUT" in prompt else "7318.21.00.30"
         index = HtsIndex.load(HTS_JSON)
-        choice = next(i for i, row in enumerate(index.candidates) if row.htsno == code)
+        if kwargs["text_format"] is HeadingSelection:
+            headings = [row for row in index.records if row.digits == 4]
+            return SimpleNamespace(status="completed", usage=fake_usage(1000, 100),
+                                   output_parsed=HeadingSelection(
+                                       choices=[next(i for i, row in enumerate(headings) if row.htsno == "7318")],
+                                       reason="matched", rationale="Fastener", missing_attributes=[],
+                                   ))
+        branch = render(index, headings=["7318"], include_parents=True)
+        choice = next(i for i, row in enumerate(branch.candidates) if row.htsno == code)
         return SimpleNamespace(status="completed", usage=fake_usage(1000, 100), output_parsed=Selection(
             choice=choice, evidence=index.get(code).description,
         ))
@@ -207,7 +216,7 @@ def test_owned_client_closes_after_success_or_failure(tmp_path, monkeypatch, fai
 def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     client = DemoClient()
     brief = execute(client, tmp_path)
-    assert client.classifier_calls == 2
+    assert client.classifier_calls == 4
     assert len(client.requests) == 4
     expected_tools = {
         "classify_bom", "find_top_import_countries", "calculate_duty_scenarios",
@@ -245,12 +254,12 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert "Token totals [run]" in output
     usage = json.loads((tmp_path / "token_usage.json").read_text())
     assert usage["status"] == "completed"
-    assert usage["totals"]["total_tokens"] == 2680
-    assert usage["stages"]["classification"]["total_tokens"] == 2200
+    assert usage["totals"]["total_tokens"] == 4880
+    assert usage["stages"]["classification"]["total_tokens"] == 4400
     assert usage["stages"]["agent"]["total_tokens"] == 480
-    assert usage["totals"]["api_calls"] == 6
+    assert usage["totals"]["api_calls"] == 8
     assert [event["label"] for event in usage["events"]] == [
-        "turn-1", "DEMO-NUT", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
+        "turn-1", "DEMO-NUT", "DEMO-NUT", "DEMO-WASHER", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
     ]
 
     replay = DemoClient()
@@ -281,7 +290,7 @@ def test_agent_recovers_from_out_of_order_tools_and_early_brief(tmp_path):
     assert "before writing the brief" in client.requests[2]["input"][-1]["content"]
     calculator_error = json.loads(client.requests[4]["input"][-1]["output"])
     assert "find_top_import_countries" in calculator_error["error"]
-    assert client.classifier_calls == 2
+    assert client.classifier_calls == 4
     assert (tmp_path / "brief.md").exists()
 
 
@@ -298,7 +307,7 @@ def test_repeated_tools_reuse_completed_work(tmp_path):
     )
     first = asyncio.run(analysis.classify_bom())
     assert asyncio.run(analysis.classify_bom()) == first == {"status": "success"}
-    assert client.classifier_calls == 2
+    assert client.classifier_calls == 4
 
     assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
     rankings = analysis.country_rankings

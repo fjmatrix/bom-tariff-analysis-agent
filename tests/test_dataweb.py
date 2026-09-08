@@ -1,17 +1,175 @@
 import asyncio
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 import httpx
 import pytest
 
+from src.duty import dataweb
 from src.duty.dataweb import (
     discover_top_import_countries,
     get_imports_by_country,
     trailing_12_months,
     write_country_rankings,
 )
+
+
+@pytest.fixture
+def report_clock(monkeypatch):
+    now = [0.0]
+    real_sleep = asyncio.sleep
+
+    async def sleep(delay):
+        now[0] += delay
+        await real_sleep(0)
+
+    monkeypatch.setattr(dataweb, "monotonic", lambda: now[0])
+    monkeypatch.setattr(dataweb.asyncio, "sleep", sleep)
+    monkeypatch.setenv("DATAWEB_API_KEY", "test-token")
+    return now
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 599])
+def test_report_retries_with_exponential_backoff(report_clock, status):
+    starts = []
+    requests = []
+
+    async def respond(request):
+        starts.append(report_clock[0])
+        requests.append(request)
+        if len(starts) < 4:
+            return httpx.Response(status, headers={"Retry-After": "invalid"})
+        return response([])
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            return await get_imports_by_country("73182100", "09/2025", "08/2026", {}, client=client)
+
+    assert asyncio.run(run()) == []
+    assert starts == ([0, 15, 45, 105] if status == 429 else [0, 5, 10, 18])
+    assert all(request.content == requests[0].content for request in requests)
+    assert all(request.headers["Authorization"] == "Bearer test-token" for request in requests)
+
+
+@pytest.mark.parametrize("header,expected", [
+    ("60", 60),
+    ("1", 15),
+    ("Tue, 08 Sep 2026 12:01:00 GMT", 60),
+    ("Tue, 08 Sep 2026 11:59:00 GMT", 15),
+    ("invalid", 15),
+    ("-10", 15),
+])
+def test_report_honors_retry_after(report_clock, header, expected):
+    starts = []
+
+    async def respond(request):
+        starts.append(report_clock[0])
+        if len(starts) == 1:
+            return httpx.Response(429, headers={"Retry-After": header})
+        return response([])
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            await get_imports_by_country("73182100", "09/2025", "08/2026", {}, client=client)
+
+    with patch("src.duty.dataweb.datetime") as clock:
+        clock.now.return_value = datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
+        asyncio.run(run())
+    assert starts == [0, expected]
+
+
+def test_exhausted_retries_preserve_cooldown_for_next_report(report_clock):
+    starts = []
+
+    async def respond(request):
+        starts.append(report_clock[0])
+        if len(starts) <= 5:
+            headers = {"Retry-After": "60"} if len(starts) == 5 else {}
+            return httpx.Response(503, headers=headers)
+        return response([])
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            with pytest.raises(httpx.HTTPStatusError) as exc:
+                await get_imports_by_country("73182100", "09/2025", "08/2026", {}, client=client)
+            assert exc.value.response.status_code == 503
+            await get_imports_by_country("73181600", "09/2025", "08/2026", {}, client=client)
+
+    asyncio.run(run())
+    assert starts == [0, 5, 10, 18, 34, 94]
+
+
+def test_discovery_recovers_from_minute_long_rate_limit_and_reports_retries(report_clock):
+    from src.events import Events
+
+    observed = []
+    starts = []
+
+    async def respond(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"options": [
+                {"name": "Canada - 1220 - CA", "iso2": "CA"},
+            ]})
+        starts.append(report_clock[0])
+        if report_clock[0] < 60:
+            return httpx.Response(429)
+        return response([["Canada", "8536694020", "Connector", "1", "2"]])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    with patch("src.duty.dataweb.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(discover_top_import_countries(
+            ["8536694020", "8536904000"], 1, events=Events(observed.append),
+        ))
+
+    assert starts == [0, 15, 45, 105, 110]
+    assert all(row["countries"] == {"CA": {"customs_value_usd": 3}} for row in result.values())
+    retries = [event for event in observed if event.name == "dataweb_retry"]
+    assert [event.data["delay_seconds"] for event in retries] == [15, 30, 60]
+    assert [event.data["attempt"] for event in retries] == [2, 3, 4]
+    assert all(event.status == "retrying" and event.data["hts_code"] == "8536694020"
+               and event.data["status_code"] == 429 for event in retries)
+
+
+def test_persistent_rate_limit_still_fails_after_bounded_attempts(report_clock):
+    with patch("src.duty.dataweb.httpx.AsyncClient.post", return_value=response([], status=429)) as post:
+        with pytest.raises(httpx.HTTPStatusError, match="HTTP 429 after 5 attempts"):
+            asyncio.run(get_imports_by_country("8536694020", "09/2025", "08/2026", {}))
+    assert post.call_count == 5
+    assert report_clock == [225]
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+def test_report_does_not_retry_other_client_errors(report_clock, status):
+    with patch("src.duty.dataweb.httpx.AsyncClient.post", return_value=response([], status=status)) as post:
+        with pytest.raises(httpx.HTTPStatusError):
+            asyncio.run(get_imports_by_country("73182100", "09/2025", "08/2026", {}))
+    assert post.call_count == 1
+    assert report_clock == [0]
+
+
+@pytest.mark.parametrize("concurrent", [False, True])
+def test_report_gap_across_clients_and_codes(report_clock, concurrent):
+    starts = []
+
+    async def respond(request):
+        starts.append(report_clock[0])
+        await asyncio.sleep(3)
+        return response([])
+
+    async def lookup(code):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            await get_imports_by_country(code, "09/2025", "08/2026", {}, client=client)
+
+    async def run():
+        if concurrent:
+            await asyncio.gather(lookup("73182100"), lookup("73181600"))
+        else:
+            await lookup("73182100")
+            await lookup("73181600")
+
+    asyncio.run(run())
+    assert starts == [0, 8]
 
 
 def response(rows, status=200, errors=None):
@@ -132,7 +290,7 @@ def test_discovery_deduplicates_codes_limits_each_ranking_and_keeps_errors():
         ],
     }
 
-    async def imports(code, start, end, country_codes, *, client):
+    async def imports(code, start, end, country_codes, *, client, events=None):
         if code == "7318210030":
             raise ValueError("no rows")
         return values[code]

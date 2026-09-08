@@ -151,6 +151,7 @@ class PartsView(Vertical):
             "Assembly: " + "; ".join(" > ".join(path) for path in part["assembly_paths"]),
             f"HTS: {row.get('code') or 'Pending / unresolved'} · {row.get('reason', '')}",
             f"Evidence: {row.get('evidence') or 'Pending'}",
+            f"Rationale: {row.get('rationale') or 'Not provided'}",
         ]
         if code in self.rankings:
             ranking = self.rankings[code]

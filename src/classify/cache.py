@@ -16,21 +16,26 @@ class ClassificationCache:
                 "CREATE TABLE IF NOT EXISTS classifications ("
                 "reference TEXT PRIMARY KEY, htsno TEXT NOT NULL, evidence TEXT NOT NULL)"
             )
+            columns = connection.execute("PRAGMA table_info(classifications)").fetchall()
+            if "rationale" not in {column[1] for column in columns}:
+                connection.execute(
+                    "ALTER TABLE classifications ADD COLUMN rationale TEXT NOT NULL DEFAULT ''"
+                )
 
     def get(self, reference: str) -> dict | None:
         with closing(sqlite3.connect(self.path)) as connection:
             connection.row_factory = sqlite3.Row
             row = connection.execute(
-                "SELECT reference, htsno, evidence FROM classifications WHERE reference = ?",
+                "SELECT reference, htsno, evidence, rationale FROM classifications WHERE reference = ?",
                 (reference,),
             ).fetchone()
         return dict(row) if row is not None else None
 
-    def put(self, reference: str, htsno: str, evidence: str) -> None:
+    def put(self, reference: str, htsno: str, evidence: str, rationale: str = "") -> None:
         with closing(sqlite3.connect(self.path)) as connection, connection:
             connection.execute(
-                "INSERT INTO classifications (reference, htsno, evidence) VALUES (?, ?, ?) "
+                "INSERT INTO classifications (reference, htsno, evidence, rationale) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(reference) DO UPDATE SET "
-                "htsno = excluded.htsno, evidence = excluded.evidence",
-                (reference, htsno, evidence),
+                "htsno = excluded.htsno, evidence = excluded.evidence, rationale = excluded.rationale",
+                (reference, htsno, evidence, rationale),
             )

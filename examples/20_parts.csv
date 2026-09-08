@@ -1,0 +1,21 @@
+level,component_reference,component_name,component_quantity,parent_bom_reference,parent_bom_name,has_child_bom,unit_price_usd,country_of_origin
+0,M00653,EVO-M [M0 use],1.00,,,True,336.77,BE
+1,M00206,EVO-M - Main Box 1/2,1.00,M00653,EVO-M [M0 use],True,336.77,BE
+2,M00148,EVO - Control Unit,1.00,M00206,EVO-M - Main Box 1/2,True,335.17,BE
+3,M00218,CNC Evo/Pro - Steel Parts - Control Unit Base,1.00,M00148,EVO - Control Unit,False,18.00,BE
+3,M00367,CNC USB Controller Mk3/4,1.00,M00148,EVO - Control Unit,False,125.00,SI
+3,M00663,MicroSD 32GB Samsung Evo+,1.00,M00148,EVO - Control Unit,False,7.00,KR
+3,M00750,SMPS 360W 24V 15A (CNC Evo),1.00,M00148,EVO - Control Unit,False,30.00,CN
+3,M00073,"Axial Fan 24V 60x60mm, panel mount",1.00,M00148,EVO - Control Unit,False,5.00,CN
+3,M00865,Wago 3 connectors,3.00,M00148,EVO - Control Unit,False,0.55,DE
+3,M01715,ISO 7380 M3x4 Black Screw,24.00,M00148,EVO - Control Unit,False,0.03,CN
+3,M00739,Raspberry Pi 4B 2G,1.00,M00148,EVO - Control Unit,False,45.00,GB
+3,M00949,Motor Driver 2DM542-N - EVO,4.00,M00148,EVO - Control Unit,False,22.00,CN
+3,M00620,EVO - Limit Switches PCB Assembly,1.00,M00148,EVO - Control Unit,True,14.80,BE
+4,M00714,PCB Custom for CNC Limit Switches,1.00,M00620,EVO - Limit Switches PCB Assembly,False,6.00,CN
+4,M00841,"ALL - Tapped XLR 3 pole female panel, vertical PCB",4.00,M00620,EVO - Limit Switches PCB Assembly,True,2.20,BE
+5,M00917,"XLR 3 pole female panel, vertical PCB",4.00,M00841,"ALL - Tapped XLR 3 pole female panel, vertical PCB",False,2.20,CN
+2,M00174,EVO - Mechanical Elements Box,1.00,M00206,EVO-M - Main Box 1/2,True,1.60,BE
+3,M00176,EVO - Mounting Tools Bag,1.00,M00174,EVO - Mechanical Elements Box,True,1.60,BE
+4,M00023,Allen Key 2mm,1.00,M00176,EVO - Mounting Tools Bag,False,0.40,TW
+4,M00806,Spanner 7mm,1.00,M00176,EVO - Mounting Tools Bag,False,1.20,TW

@@ -5,8 +5,11 @@ import asyncio
 import json
 import os
 from contextlib import nullcontext
-from datetime import date
+from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
+from time import monotonic
+from weakref import WeakKeyDictionary
 
 import httpx
 
@@ -15,6 +18,88 @@ from src.events import Events
 
 REPORT_URL = "https://datawebws.usitc.gov/dataweb/api/v2/report2/runReport"
 COUNTRIES_URL = "https://datawebws.usitc.gov/dataweb/api/v2/country/getAllCountries"
+REPORT_MAX_ATTEMPTS = 5
+REPORT_BACKOFF_SECONDS = 2.0
+REPORT_RATE_LIMIT_BACKOFF_SECONDS = 15.0
+REPORT_MIN_GAP_SECONDS = 5.0
+
+
+def _retry_after_seconds(value: str | None) -> float:
+    if value is None:
+        return 0.0
+    try:
+        return max(0, int(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+
+
+class _ReportRunner:
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.next_run = 0.0
+
+    async def post(
+        self, client: httpx.AsyncClient, token: str, payload: dict, *, events=None,
+    ) -> httpx.Response:
+        async with self.lock:
+            for attempt in range(REPORT_MAX_ATTEMPTS):
+                delay = self.next_run - monotonic()
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                try:
+                    response = await client.post(
+                        REPORT_URL,
+                        headers={"Authorization": f"Bearer {token}"},
+                        json=payload,
+                        timeout=120,
+                    )
+                finally:
+                    self.next_run = monotonic() + REPORT_MIN_GAP_SECONDS
+                if response.status_code == 429 or 500 <= response.status_code < 600:
+                    backoff = (REPORT_RATE_LIMIT_BACKOFF_SECONDS
+                               if response.status_code == 429 else REPORT_BACKOFF_SECONDS)
+                    delay = max(
+                        REPORT_MIN_GAP_SECONDS,
+                        backoff * 2 ** attempt,
+                        _retry_after_seconds(response.headers.get("Retry-After")),
+                    )
+                    # Preserve the cooldown for the next code even after retries run out.
+                    self.next_run = monotonic() + delay
+                    if attempt < REPORT_MAX_ATTEMPTS - 1:
+                        if events is not None:
+                            events.emit(
+                                "dataweb_retry", "retrying",
+                                hts_code=payload["searchOptions"]["commodities"]["commoditiesManual"],
+                                status_code=response.status_code,
+                                attempt=attempt + 2, max_attempts=REPORT_MAX_ATTEMPTS,
+                                delay_seconds=delay,
+                                retry_after=response.headers.get("Retry-After"),
+                            )
+                        continue
+                    raise httpx.HTTPStatusError(
+                        f"DataWeb report failed with HTTP {response.status_code} after "
+                        f"{REPORT_MAX_ATTEMPTS} attempts; cooldown {delay:g}s",
+                        request=response.request, response=response,
+                    )
+                response.raise_for_status()
+                return response
+
+
+# Share pacing across clients without sharing asyncio locks between event loops.
+_report_runners: WeakKeyDictionary = WeakKeyDictionary()
+
+
+async def _post_report(
+    client: httpx.AsyncClient, token: str, payload: dict, *, events=None,
+) -> httpx.Response:
+    loop = asyncio.get_running_loop()
+    if loop not in _report_runners:
+        _report_runners[loop] = _ReportRunner()
+    return await _report_runners[loop].post(client, token, payload, events=events)
 
 
 def _code(hts_code: str) -> str:
@@ -139,7 +224,7 @@ async def get_imports_by_country(
     start: str,
     end: str,
     country_codes: dict[str, str] | None = None,
-    *, client: httpx.AsyncClient | None = None,
+    *, client: httpx.AsyncClient | None = None, events=None,
 ) -> list[dict]:
     """Return consumption customs value by origin over the requested months."""
     code = _code(hts_code)
@@ -147,13 +232,7 @@ async def get_imports_by_country(
     if not token:
         raise ValueError("DATAWEB_API_KEY is not configured")
     async with nullcontext(client) if client is not None else httpx.AsyncClient() as client:
-        response = await client.post(
-            REPORT_URL,
-            headers={"Authorization": f"Bearer {token}"},
-            json=_payload(code, start, end),
-            timeout=120,
-        )
-        response.raise_for_status()
+        response = await _post_report(client, token, _payload(code, start, end), events=events)
         report = response.json().get("dto")
         if isinstance(report, dict) and (report.get("errors") or report.get("needMoreTime")):
             raise ValueError("DataWeb could not complete the report")
@@ -205,7 +284,7 @@ async def discover_top_import_countries(
                 with events.action("country_lookup", hts_code=code,
                                    position=position, total=len(codes)) as outcome:
                     countries = await get_imports_by_country(
-                        code, start, end, country_codes, client=client,
+                        code, start, end, country_codes, client=client, events=events,
                     )
                     result[code]["countries"] = {
                         row["country"]: {"customs_value_usd": row["customs_value_usd"]}

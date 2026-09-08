@@ -38,6 +38,9 @@ def describe(event):
         if "ranking" in data and "countries" in data["ranking"]:
             label += f" → {len(data['ranking']['countries'])} origins"
         return label
+    if event.name == "dataweb_retry":
+        return (f"DataWeb HTTP {data['status_code']} · HTS {data['hts_code']} · "
+                f"retry {data['attempt']}/{data['max_attempts']} in {data['delay_seconds']:g}s")
     if event.name == "agent":
         label = "Preparing decision brief / agent response" if data["results_ready"] else "Waiting for agent response"
         if event.status == "completed":

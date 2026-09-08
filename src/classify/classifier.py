@@ -20,7 +20,7 @@ MAX_OUTPUT_TOKENS = 1000
 
 class Selection(BaseModel):
     choice: int | None
-    evidence: str
+    rationale: str
 
 
 @dataclass
@@ -31,25 +31,26 @@ class Classification:
     reason: str
     code: str | None
     evidence: str
+    rationale: str = ""
 
 
 def resolve(
     component: Component, selection: Selection, candidates: list[HtsRecord],
 ) -> Classification:
     code = None
+    evidence = ""
     if selection.choice is None:
         status, reason = "unclassified", "no_supported_candidate"
     elif not 0 <= selection.choice < len(candidates):
         status, reason = "needs_review", "index_out_of_range"
     else:
         chosen = candidates[selection.choice]
-        if not selection.evidence or selection.evidence not in chosen.path:
-            status, reason = "needs_review", "evidence_not_in_path"
-        else:
-            status, reason = "classified", "clean"
-            code = chosen.htsno
+        status, reason = "classified", "clean"
+        code = chosen.htsno
+        evidence = chosen.path
     return Classification(
-        component.reference, component.name, status, reason, code, selection.evidence,
+        component.reference, component.name, status, reason, code, evidence,
+        selection.rationale,
     )
 
 
@@ -68,7 +69,7 @@ class Classifier:
         if cached is not None:
             for choice, candidate in enumerate(self.tree.candidates):
                 if candidate.htsno == cached["htsno"]:
-                    selection = Selection(choice=choice, evidence=cached["evidence"])
+                    selection = Selection(choice=choice, rationale=cached["rationale"])
                     if resolve(component, selection, self.tree.candidates).code is not None:
                         self.usage.record("classification", component.reference, MODEL)
                         return selection
@@ -87,7 +88,8 @@ class Classifier:
         selection = response.output_parsed
         classification = resolve(component, selection, self.tree.candidates)
         if classification.code is not None:
-            self.cache.put(component.reference, classification.code, classification.evidence)
+            self.cache.put(component.reference, classification.code, classification.evidence,
+                           classification.rationale)
         return selection
 
     async def run(self, components: list[Component]) -> list[Classification]:
