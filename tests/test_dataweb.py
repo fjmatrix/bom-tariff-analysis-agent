@@ -195,6 +195,38 @@ def test_country_mapping_failure_preserves_per_code_errors():
     assert all(row["countries"] == {} and row["error"] == "unavailable" for row in result.values())
 
 
+def test_lookup_events_deduplicate_codes_and_capture_partial_failure():
+    from src.events import Events
+
+    observed = []
+    with patch("src.duty.dataweb._country_codes", return_value={}), \
+         patch("src.duty.dataweb.get_imports_by_country", side_effect=[
+             [{"country": "CA", "customs_value_usd": 123}], ValueError("no rows"),
+         ]):
+        result = asyncio.run(discover_top_import_countries(
+            ["7318.16.00", "73181600", "73182100"], 5, events=Events(observed.append),
+        ))
+    lookups = [event for event in observed if event.name == "country_lookup"]
+    assert [event.status for event in lookups] == ["started", "completed", "started", "failed"]
+    assert all(event.data["total"] == 2 for event in lookups)
+    assert result["73182100"]["error"] == "no rows"
+    assert lookups[1].data["ranking"]["countries"] == {"CA": {"customs_value_usd": 123}}
+
+
+def test_metadata_failure_reports_all_lookups_skipped():
+    from src.events import Events
+
+    observed = []
+    with patch("src.duty.dataweb._country_codes", side_effect=ValueError("unavailable")):
+        asyncio.run(discover_top_import_countries(
+            ["73182100", "73181600"], 5, events=Events(observed.append),
+        ))
+    assert [(event.name, event.status) for event in observed] == [
+        ("country_metadata", "started"), ("country_metadata", "failed"),
+        ("country_lookup", "skipped"), ("country_lookup", "skipped"),
+    ]
+
+
 def test_country_rankings_jsonl_preserves_values_period_and_errors(tmp_path):
     result = {
         "7318210030": {

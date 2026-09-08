@@ -55,6 +55,69 @@ prompt changes do not invalidate entries. Cached codes and evidence are checked
 against the current HTS tree; unsupported entries are refreshed. Only validated
 classifications are cached. Old JSON selection caches are no longer used.
 
+## Interactive terminal
+
+Textual is an optional presentation layer over the same analysis runner. Install
+the optional extra in the existing environment:
+
+```bash
+uv pip install --python .venv/bin/python -e '.[tui]'
+```
+
+Then launch the interface with the same BOM, country-count, and output arguments:
+
+```bash
+.venv/bin/python -m src.tui \
+  --bom examples/two_parts.csv \
+  --top-countries 5 \
+  --out out/two_parts
+```
+
+The Parts tab starts with the ten largest purchased parts by BOM value and shows
+their cumulative share. Search or select **All parts** to explore the whole BOM;
+every part is analyzed regardless of the view. Select a row for assembly context,
+HTS evidence, trade rankings, and origin comparisons. Duty and savings sorts
+become meaningful after calculation. The adjacent workflow shows real model and
+tool activity, cache hits, per-part classification, per-HTS lookup progress,
+elapsed time, and reported token counts. A shared HTS lookup updates every related
+part. The compact layout stacks activity below results in narrow terminals.
+
+**Opportunities** shows modeled savings and quote ceilings from `brief_data` as
+soon as calculation finishes. **Needs review** collects unresolved classifications,
+rates, and country lookup errors. **Brief** displays the generated narrative.
+Coverage and assumptions remain visible. The original output files are still
+written to the displayed output directory, and calculated results remain visible
+if the subsequent brief request fails.
+
+Use Tab / Shift+Tab to move focus, arrow keys to navigate tables, **c** to cancel
+analysis while retaining the screen, and **q** or **Ctrl+C** to cancel and quit.
+Letter shortcuts apply when a text input is not consuming them. Cancellation
+finalizes `token_usage.json` as `cancelled` and retains already-written artifacts
+and cached classifications; it does not implement resumable runs.
+
+Python callers can observe the workflow without importing Textual:
+
+```python
+events = []
+brief = await run(bom_path, top_countries, out_dir, on_event=events.append)
+```
+
+Each `WorkflowEvent` has a per-run sequence, UTC timestamp, name, status, action
+ID, and data. Actions emit `started` followed by `completed`, `failed`,
+`cancelled`, or `rejected`. Lookup skips and usage/results are standalone events.
+Observers are synchronous, should return promptly, and must treat event data as
+read-only. Observer exceptions are logged without interrupting analysis. Passing
+an observer replaces console rendering; omitting it retains plain terminal output.
+Custom injected country-discovery functions keep their existing two-argument
+interface and report tool-level progress; the built-in discovery also emits
+per-HTS events. Network calls remain sequential.
+
+Focused UI verification with fake services (requires the optional extra):
+
+```bash
+.venv/bin/python -m pytest tests/test_events.py tests/test_tui.py tests/test_run.py -q
+```
+
 ## HTS rate selection
 
 `src/duty/rates.py` implements:

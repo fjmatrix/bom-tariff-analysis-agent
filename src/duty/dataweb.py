@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 
 from src import config  # Load DATAWEB_API_KEY from the repository's .env.
+from src.events import Events
 
 REPORT_URL = "https://datawebws.usitc.gov/dataweb/api/v2/report2/runReport"
 COUNTRIES_URL = "https://datawebws.usitc.gov/dataweb/api/v2/country/getAllCountries"
@@ -175,6 +176,7 @@ async def get_imports_by_country(
 
 async def discover_top_import_countries(
     hts_codes: list[str], top_n: int, today: date | None = None,
+    *, events=None,
 ) -> dict:
     """Query each distinct code and retain its top origins by customs value."""
     if top_n < 1:
@@ -187,25 +189,32 @@ async def discover_top_import_countries(
         code: {"period_start": start, "period_end": end, "countries": {}}
         for code in codes
     }
+    events = events if events is not None else Events()
     async with httpx.AsyncClient() as client:
         try:
-            country_codes = await _country_codes(client)
+            with events.action("country_metadata"):
+                country_codes = await _country_codes(client)
         except (httpx.HTTPError, ValueError, KeyError) as exc:
-            for ranking in result.values():
+            for position, (code, ranking) in enumerate(result.items(), 1):
                 ranking["error"] = str(exc)
+                events.emit("country_lookup", "skipped", hts_code=code,
+                            position=position, total=len(codes), ranking=ranking)
             return result
-        for code in codes:
+        for position, code in enumerate(codes, 1):
             try:
-                countries = await get_imports_by_country(
-                    code, start, end, country_codes, client=client,
-                )
+                with events.action("country_lookup", hts_code=code,
+                                   position=position, total=len(codes)) as outcome:
+                    countries = await get_imports_by_country(
+                        code, start, end, country_codes, client=client,
+                    )
+                    result[code]["countries"] = {
+                        row["country"]: {"customs_value_usd": row["customs_value_usd"]}
+                        for row in countries[:top_n]
+                    }
+                    outcome["ranking"] = result[code]
             except (httpx.HTTPError, ValueError, KeyError) as exc:
                 result[code]["error"] = str(exc)
                 continue
-            result[code]["countries"] = {
-                row["country"]: {"customs_value_usd": row["customs_value_usd"]}
-                for row in countries[:top_n]
-            }
     return result
 
 

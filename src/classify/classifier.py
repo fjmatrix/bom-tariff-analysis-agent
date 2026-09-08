@@ -12,6 +12,7 @@ from src.bom.flatten import Component
 from src.hts.index import HtsRecord
 from src.hts.render import CandidateTree
 from src.usage import TokenUsage
+from src.events import Events
 
 MODEL = "gpt-5.6-luna"
 MAX_OUTPUT_TOKENS = 16000
@@ -53,12 +54,14 @@ def resolve(
 
 
 class Classifier:
-    def __init__(self, tree: CandidateTree, cache: ClassificationCache, client, usage=None):
+    def __init__(self, tree: CandidateTree, cache: ClassificationCache, client, usage=None,
+                 events=None):
         self.tree = tree
         self.cache = cache
         self.client = client
         self.system = system_prompt(tree)
         self.usage = usage if usage is not None else TokenUsage()
+        self.events = events if events is not None else Events()
 
     async def select(self, component: Component) -> Selection:
         cached = self.cache.get(component.reference)
@@ -88,7 +91,16 @@ class Classifier:
         return selection
 
     async def run(self, components: list[Component]) -> list[Classification]:
-        return [resolve(c, await self.select(c), self.tree.candidates) for c in components]
+        rows = []
+        for position, component in enumerate(components, 1):
+            with self.events.action(
+                "classification", reference=component.reference,
+                position=position, total=len(components),
+            ) as result:
+                row = resolve(component, await self.select(component), self.tree.candidates)
+                rows.append(row)
+                result["classification"] = asdict(row)
+        return rows
 
 
 def write_classified(rows: list[Classification], path: str | Path) -> None:

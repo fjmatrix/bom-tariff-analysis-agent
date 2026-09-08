@@ -1,0 +1,46 @@
+Screen {
+    background: #101820;
+    color: #dce5ed;
+    overflow-y: auto;
+}
+Header { background: #172733; }
+#paths { height: 1; margin: 1 2 0 2; color: #829bab; }
+#workspace { height: 1fr; padding: 1 2; }
+DecisionView { width: 2fr; height: 1fr; padding-right: 2; }
+#summary { height: auto; min-height: 3; padding: 0 1 1 1; color: #9edbc5; }
+TabbedContent { height: 1fr; }
+ContentSwitcher, TabPane { height: 1fr; }
+TabPane { padding: 1 0; }
+PartsView { height: 1fr; }
+#part-controls { height: 3; }
+#search { width: 1fr; }
+#sort { width: 22; }
+#all-parts { width: 18; }
+#part-share { height: auto; margin: 1 0; color: #829bab; }
+DataTable { height: 1fr; background: #101820; }
+DataTable > .datatable--header { background: #203340; color: #dce5ed; text-style: bold; }
+DataTable > .datatable--cursor { background: #315563; color: #ffffff; }
+#part-detail-scroll { height: 9; border-top: solid #315563; margin-top: 1; }
+#part-detail { height: auto; padding: 1; }
+#opportunity-note { height: auto; margin-bottom: 1; color: #aabcc9; }
+#assumptions { height: auto; padding-top: 1; color: #829bab; }
+#activity { width: 1fr; min-width: 30; border-left: solid #315563; padding-left: 2; }
+.section-label { height: 1; color: #829bab; text-style: bold; }
+#stages { height: 5; margin: 1 0; }
+#current-action { height: 4; }
+#spinner { width: 5; height: 3; color: #9edbc5; }
+#current { width: 1fr; height: auto; }
+#progress-label { height: 1; color: #829bab; }
+#progress { height: 1; margin-bottom: 1; }
+#history { height: 1fr; background: #101820; }
+#tokens { height: auto; padding-top: 1; color: #829bab; }
+Footer { background: #172733; }
+.compact #workspace { layout: vertical; min-height: 34; }
+.compact DecisionView { width: 1fr; height: 2fr; padding-right: 0; }
+.compact #activity { width: 1fr; height: 9; border-left: none; border-top: solid #315563; padding: 1 0 0 0; }
+.compact #stages, .compact .section-label { display: none; }
+.compact #part-detail-scroll { height: 3; }
+.compact #part-share { height: 1; margin: 0; }
+.compact #current-action { height: 2; }
+.compact #assumptions { height: 3; }
+.compact #sort { width: 18; }

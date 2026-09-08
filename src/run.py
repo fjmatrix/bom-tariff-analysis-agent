@@ -4,6 +4,8 @@ import argparse
 import asyncio
 import json
 from contextlib import nullcontext
+from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 
 from openai import AsyncOpenAI
@@ -18,6 +20,8 @@ from src.duty.scenarios import calculate_duty_scenarios, write_scenarios
 from src.hts.index import HtsIndex
 from src.hts.render import render
 from src.usage import TokenUsage
+from src.console import console_event
+from src.events import Events
 
 MAX_TURNS = 8
 
@@ -65,10 +69,17 @@ class BomAnalysis:
         self, bom_path, top_countries, out_dir, client,
         country_discovery=discover_top_import_countries,
         usage=None,
+        events=None,
     ):
+        self.events = events if events is not None else Events()
         if top_countries < 1:
             raise ValueError("top_countries must be at least 1")
-        self.components = Bom.load(bom_path).components()
+        with self.events.action("load") as result:
+            self.components = Bom.load(bom_path).components()
+            result["components"] = [
+                {**asdict(part), "extended_cost_usd": part.extended_cost_usd}
+                for part in self.components
+            ]
         self.top_countries = top_countries
         self.out_dir = Path(out_dir)
         self.index = HtsIndex.load(HTS_JSON)
@@ -76,12 +87,15 @@ class BomAnalysis:
             render(self.index),
             ClassificationCache(), client,
             usage=usage,
+            events=self.events,
         )
         self.classifications = None
         self.country_rankings = None
         self.scenarios = None
         self.brief_data = None
         self.country_discovery = country_discovery
+        if country_discovery is discover_top_import_countries:
+            self.country_discovery = partial(country_discovery, events=self.events)
 
     async def classify_bom(self):
         if self.classifications is None:
@@ -126,26 +140,37 @@ class BomAnalysis:
                 json.dumps(self.brief_data, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            self.events.emit("business_results", brief_data=self.brief_data,
+                             scenarios=self.scenarios)
         return self.scenarios
 
 
-async def run(bom_path, top_countries, out_dir, client=None, country_discovery=None) -> str:
-    usage = TokenUsage(Path(out_dir) / "token_usage.json")
-    status = "failed"
-    try:
-        async with nullcontext(client) if client is not None else AsyncOpenAI() as client:
-            brief = await _run(bom_path, top_countries, out_dir, client, country_discovery, usage)
-        status = "completed"
-        return brief
-    finally:
-        usage.finish(status)
+async def run(bom_path, top_countries, out_dir, client=None, country_discovery=None,
+              *, on_event=None) -> str:
+    events = Events(on_event if on_event is not None else console_event)
+    usage = TokenUsage(Path(out_dir) / "token_usage.json", events=events)
+    with events.action("run", out_dir=str(out_dir)):
+        status = "failed"
+        try:
+            async with nullcontext(client) if client is not None else AsyncOpenAI() as client:
+                brief = await _run(
+                    bom_path, top_countries, out_dir, client, country_discovery, usage, events,
+                )
+            status = "completed"
+            return brief
+        except asyncio.CancelledError:
+            status = "cancelled"
+            raise
+        finally:
+            usage.finish(status)
 
 
-async def _run(bom_path, top_countries, out_dir, client, country_discovery, usage) -> str:
+async def _run(bom_path, top_countries, out_dir, client, country_discovery, usage, events) -> str:
     analysis = BomAnalysis(
         bom_path, top_countries, out_dir, client,
         country_discovery or discover_top_import_countries,
         usage=usage,
+        events=events,
     )
     conversation = [{"role": "user", "content": "Analyze the loaded BOM and country scenarios."}]
     actions = {
@@ -172,18 +197,19 @@ async def _run(bom_path, top_countries, out_dir, client, country_discovery, usag
         "strict": True,
     } for name, (description, _) in actions.items()]
     for turn in range(1, MAX_TURNS + 1):
-        response = await usage.request(
-            client.responses.create, "agent", f"turn-{turn}",
-            model=MODEL,
-            instructions=INSTRUCTIONS,
-            input=conversation,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
-            tools=tools,
-            tool_choice="auto",
-            parallel_tool_calls=False,
-        )
-        if response.status != "completed":
-            raise RuntimeError(f"Incomplete model response (status={response.status})")
+        with events.action("agent", turn=turn, results_ready=analysis.brief_data is not None):
+            response = await usage.request(
+                client.responses.create, "agent", f"turn-{turn}",
+                model=MODEL,
+                instructions=INSTRUCTIONS,
+                input=conversation,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                tools=tools,
+                tool_choice="auto",
+                parallel_tool_calls=False,
+            )
+            if response.status != "completed":
+                raise RuntimeError(f"Incomplete model response (status={response.status})")
         conversation.extend(response.output)
         calls = [item for item in response.output if item.type == "function_call"]
 
@@ -197,29 +223,37 @@ async def _run(bom_path, top_countries, out_dir, client, country_discovery, usag
             if not response.output_text.strip():
                 raise RuntimeError("No brief returned")
             brief = response.output_text.strip() + "\n"
-            (analysis.out_dir / "brief.md").write_text(brief, encoding="utf-8")
-            print(f"Wrote results to {analysis.out_dir}", flush=True)
+            with events.action("brief", out_dir=str(analysis.out_dir)) as result:
+                (analysis.out_dir / "brief.md").write_text(brief, encoding="utf-8")
+                result["markdown"] = brief
             return brief
 
         if len(calls) != 1:
             raise RuntimeError("Expected at most one tool call per turn")
         call = calls[0]
-        print(f"\nAgent calls {call.name}()", flush=True)
         try:
             arguments = json.loads(call.arguments)
         except json.JSONDecodeError:
             arguments = None
-        if call.name not in actions:
-            result = {"error": f"Unknown tool: {call.name}"}
-        elif arguments != {}:
-            result = {"error": "These tools accept only an empty object of arguments."}
-        else:
-            # Tool execution
-            result = await actions[call.name][1]()
-            if call.name == "calculate_duty_scenarios" and analysis.brief_data is not None:
-                result = {"scenarios": result, "brief_data": analysis.brief_data}
+        completed = {
+            "classify_bom": analysis.classifications is not None,
+            "find_top_import_countries": analysis.country_rankings is not None,
+            "calculate_duty_scenarios": analysis.scenarios is not None,
+        }
+        with events.action("tool", tool=call.name, reused=completed.get(call.name, False)) as outcome:
+            if call.name not in actions:
+                result = {"error": f"Unknown tool: {call.name}"}
+            elif arguments != {}:
+                result = {"error": "These tools accept only an empty object of arguments."}
+            else:
+                # Tool execution
+                result = await actions[call.name][1]()
+                if call.name == "calculate_duty_scenarios" and analysis.brief_data is not None:
+                    result = {"scenarios": result, "brief_data": analysis.brief_data}
+            outcome["result"] = result
+            if "error" in result:
+                outcome["status"] = "rejected"
         output = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-        print(f"Tool result: {output}", flush=True)
         conversation.append({
             "type": "function_call_output", "call_id": call.call_id, "output": output,
         })

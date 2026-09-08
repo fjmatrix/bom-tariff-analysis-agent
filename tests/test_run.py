@@ -97,6 +97,93 @@ def execute(client, tmp_path):
     ))
 
 
+def test_observed_run_preserves_outputs_and_emits_results_before_brief(tmp_path, capsys):
+    expected = execute(DemoClient(), tmp_path / "plain")
+    capsys.readouterr()
+    observed = []
+    actual = asyncio.run(run(
+        ROOT / "examples/two_parts.csv", 1, tmp_path / "observed",
+        client=DemoClient(), country_discovery=fake_discovery, on_event=observed.append,
+    ))
+    assert actual == expected
+    assert capsys.readouterr().out == ""
+    for name in ("brief.md", "brief_data.json", "scenarios.jsonl", "classified.csv", "components.csv"):
+        assert (tmp_path / "plain" / name).read_bytes() == (tmp_path / "observed" / name).read_bytes()
+    assert [event.sequence for event in observed] == list(range(1, len(observed) + 1))
+    names = [event.name for event in observed]
+    assert names.index("business_results") < names.index("brief")
+    assert observed[-1].name == "run" and observed[-1].status == "completed"
+    assert len([event for event in observed if event.name == "usage" and event.status == "cache_hit"]) == 2
+    starts = {event.action_id for event in observed if event.status == "started"}
+    ends = [event.action_id for event in observed if event.action_id and event.status != "started"]
+    assert starts == set(ends) and len(starts) == len(ends)
+
+
+def test_reused_tools_do_not_duplicate_part_events(tmp_path):
+    observed = []
+    asyncio.run(run(
+        ROOT / "examples/two_parts.csv", 1, tmp_path,
+        client=DemoClient(["classify_bom", "classify_bom", "find_top_import_countries",
+                           "calculate_duty_scenarios", None]),
+        country_discovery=fake_discovery, on_event=observed.append,
+    ))
+    assert len([event for event in observed if event.name == "classification" and event.status == "started"]) == 2
+    assert any(event.name == "tool" and event.data["reused"] for event in observed)
+
+
+def test_cancellation_closes_actions_and_finalizes_usage(tmp_path):
+    observed = []
+
+    async def exercise():
+        client = DemoClient()
+        entered = asyncio.Event()
+
+        async def wait_for_model(**kwargs):
+            entered.set()
+            await asyncio.Event().wait()
+
+        client.parse = wait_for_model
+        task = asyncio.create_task(run(
+            ROOT / "examples/two_parts.csv", 1, tmp_path, client=client,
+            country_discovery=fake_discovery, on_event=observed.append,
+        ))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(exercise())
+    report = json.loads((tmp_path / "token_usage.json").read_text())
+    assert report["status"] == "cancelled"
+    assert report["events"][-1]["status"] == "cancelled"
+    assert observed[-1].name == "run" and observed[-1].status == "cancelled"
+    starts = {event.action_id for event in observed if event.status == "started"}
+    ends = {event.action_id for event in observed if event.action_id and event.status != "started"}
+    assert starts == ends
+    assert not (tmp_path / "brief.md").exists()
+
+
+def test_brief_failure_keeps_business_results(tmp_path):
+    observed = []
+    client = DemoClient()
+    original = client.create
+
+    async def fail_after_tools(**kwargs):
+        if len(client.requests) == 3:
+            raise RuntimeError("brief unavailable")
+        return await original(**kwargs)
+
+    client.create = fail_after_tools
+    with pytest.raises(RuntimeError, match="brief unavailable"):
+        asyncio.run(run(
+            ROOT / "examples/two_parts.csv", 1, tmp_path, client=client,
+            country_discovery=fake_discovery, on_event=observed.append,
+        ))
+    assert any(event.name == "business_results" for event in observed)
+    assert (tmp_path / "brief_data.json").exists()
+    assert observed[-1].name == "run" and observed[-1].status == "failed"
+
+
 @pytest.mark.parametrize("fails", [False, True])
 def test_owned_client_closes_after_success_or_failure(tmp_path, monkeypatch, fails):
     client = DemoClient()

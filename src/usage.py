@@ -1,7 +1,11 @@
 """Trace provider-reported tokens without counting cached/reasoning subsets twice."""
 
+import asyncio
 import json
 from pathlib import Path
+
+from src.console import console_event
+from src.events import Events
 
 
 TOKEN_FIELDS = (
@@ -11,14 +15,18 @@ TOKEN_FIELDS = (
 
 
 class TokenUsage:
-    def __init__(self, path=None):
+    def __init__(self, path=None, events=None):
         self.path = Path(path) if path is not None else None
         self.events = []
         self.status = "running"
+        self.observer = events if events is not None else Events(console_event)
 
     async def request(self, method, stage, label, **kwargs):
         try:
             response = await method(**kwargs)
+        except asyncio.CancelledError:
+            self.record(stage, label, kwargs["model"], status="cancelled")
+            raise
         except Exception as error:
             self.record(stage, label, kwargs["model"], status=type(error).__name__)
             raise
@@ -51,9 +59,8 @@ class TokenUsage:
             "status": status, **counts,
         })
         self.save()
-        detail = ", ".join(f"{field}={value if value is not None else 'unknown'}"
-                           for field, value in counts.items())
-        print(f"Tokens [{stage} {label}] {status}: {detail}", flush=True)
+        self.observer.emit("usage", status, stage=stage, label=label, counts=counts,
+                           totals=self.report()["totals"])
 
     def totals(self, events):
         return {
@@ -85,6 +92,4 @@ class TokenUsage:
     def finish(self, status):
         self.status = status
         self.save()
-        report = self.report()
-        for label, counts in [*report["stages"].items(), ("run", report["totals"])]:
-            print(f"Token totals [{label}]: {json.dumps(counts)}", flush=True)
+        self.observer.emit("usage_totals", report=self.report())
