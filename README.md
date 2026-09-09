@@ -1,19 +1,17 @@
 # BOM Tariff Exposure Agent
 
-![BOM tariff analysis showing sourcing opportunities and the completed workflow](docs/assets/cover.png)
+![BOM tariff TUI progressing through analysis and opening the final brief](docs/assets/tui-demo.gif)
+
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991?logo=openai&logoColor=white)](https://platform.openai.com/)
 [![Data: USITC DataWeb](https://img.shields.io/badge/Data-USITC%20DataWeb-1f6feb)](https://dataweb.usitc.gov/)
 
-A small agent workflow that turns a real BOM into tariff and inflation
-intelligence.
-
-It classifies components into HTS codes, combines USITC tariff
-and import data with BLS-style indices (currently mocked), and produces a short
-brief highlighting cost pressures, alternative sourcing options, and
-recommendations.
+Connect your product’s BOM and purchase costs with tariff rates and import data
+to quantify cost pressure, pinpoint exposed parts, and identify sourcing actions
+that protect margin. Compare origins, estimate savings, and set purchase-price
+targets in a clear decision brief.
 
 ## Workflow
 
@@ -51,7 +49,7 @@ Requires Python 3.11+, the project dependencies, and `OPENAI_API_KEY` and
 `DATAWEB_API_KEY` in `.env` or your shell. With the existing environment:
 
 ```bash
-.venv/bin/python -m src.run --bom examples/20_parts.csv --out out/20_parts
+.venv/bin/python -m src.run --bom examples/two_parts.csv --out out/two_parts
 ```
 
 Defaults: `--bom BOM.csv`, `--out out`. For the interactive terminal, install the

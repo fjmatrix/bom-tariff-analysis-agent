@@ -9,8 +9,6 @@ __pycache__/
 
 # Environment / secrets
 .env
-.env.*
-
 # Python
 __pycache__/
 *.py[cod]
