@@ -14,7 +14,7 @@ from src.hts.render import CandidateTree
 from src.usage import TokenUsage
 from src.events import Events
 
-MODEL = "gpt-5.6-terra"
+MODEL = "gpt-5.6-sol"
 MAX_OUTPUT_TOKENS = 1000
 
 
