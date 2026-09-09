@@ -1,6 +1,7 @@
 # BOM Tariff Exposure Agent
 
-![BOM tariff analysis showing sourcing opportunities and the completed workflow](docs/assets/cover.png)
+![BOM tariff TUI progressing through analysis and opening the final brief](docs/assets/tui-demo.gif)
+
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -14,6 +15,8 @@ It classifies components into HTS codes, combines USITC tariff
 and import data with BLS-style indices (currently mocked), and produces a short
 brief highlighting cost pressures, alternative sourcing options, and
 recommendations.
+
+
 
 ## Workflow
 
@@ -51,7 +54,7 @@ Requires Python 3.11+, the project dependencies, and `OPENAI_API_KEY` and
 `DATAWEB_API_KEY` in `.env` or your shell. With the existing environment:
 
 ```bash
-.venv/bin/python -m src.run --bom examples/20_parts.csv --out out/20_parts
+.venv/bin/python -m src.tui --bom examples/20_parts.csv --out out/20_parts
 ```
 
 Defaults: `--bom BOM.csv`, `--out out`. For the interactive terminal, install the
