@@ -16,10 +16,12 @@ import asyncio
 import json
 from dataclasses import asdict
 
-from src.classify.classifier import MAX_OUTPUT_TOKENS, MODEL, Selection, resolve
+from src.classify.classifier import Selection, resolve
 from src.classify.prompts import component_prompt, system_prompt
 from src.bom.flatten import Bom
-from src.config import BOM_CSV, HTS_JSON
+from src.config import (
+    BOM_CSV, CLASSIFICATION_MAX_OUTPUT_TOKENS, CLASSIFICATION_MODEL, HTS_JSON,
+)
 from src.hts.index import HtsIndex
 from src.hts.render import render
 
@@ -45,8 +47,8 @@ async def main() -> None:
 
     async with openai.AsyncOpenAI() as client:
         response = await client.responses.parse(
-            model=MODEL,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
+            model=CLASSIFICATION_MODEL,
+            max_output_tokens=CLASSIFICATION_MAX_OUTPUT_TOKENS,
             instructions=system_prompt(tree),
             input=[{"role": "user", "content": message}],
             text_format=Selection,

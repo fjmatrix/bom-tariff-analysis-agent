@@ -5,23 +5,26 @@ from dataclasses import replace
 
 import pytest
 
-from src.classify.classifier import Selection, resolve
+from src.classify.classifier import Classifier, Selection
 from src.bom.flatten import Bom
 from src.config import HTS_JSON, ROOT
 from src.duty.rates import duty_rate, qualifies_for_special_program
 from src.duty.scenarios import calculate_duty_scenarios, write_scenarios
 from src.hts.index import HtsIndex, HtsRecord
+from src.hts.render import render
 
 
 @pytest.fixture
 def demo():
     components = Bom.load(ROOT / "examples/two_parts.csv").components()
     index = HtsIndex.load(HTS_JSON)
+    tree = render(index)
+    classifier = Classifier(tree, None, None)
     classifications = []
     for part, code in zip(components, ["7318.16.00.60", "7318.21.00.30"]):
-        choice = next(i for i, r in enumerate(index.candidates) if r.htsno == code)
-        selection = Selection(choice=choice, evidence=index.get(code).description)
-        classifications.append(resolve(part, selection, index.candidates))
+        choice = next(i for i, r in enumerate(tree.candidates) if r.htsno == code)
+        selection = Selection(choice=choice, rationale=index.get(code).description)
+        classifications.append(classifier._build_classification(part, selection))
     return components, classifications, index, {
         classification.code: ["CA"] for classification in classifications
     }
