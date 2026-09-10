@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.classify.classifier import HeadingSelection, Selection
-from src.config import HTS_JSON, ROOT
+from src.config import AGENT_MAX_TURNS, HTS_JSON, ROOT
 from src.hts.index import HtsIndex
 from src.hts.render import render
-from src.run import MAX_TURNS, BomAnalysis, run
+from src.run import BomAnalysis, run
 
 
 @pytest.fixture(autouse=True)
@@ -364,7 +364,7 @@ def test_country_lookup_errors_still_allow_current_origin_scenarios(tmp_path):
 
 @pytest.mark.parametrize("arguments", ['{"country": "CA"}', "invalid", "null", "[]"])
 def test_bad_arguments_do_not_execute_tool(tmp_path, arguments):
-    client = DemoClient(["classify_bom"] * MAX_TURNS)
+    client = DemoClient(["classify_bom"] * AGENT_MAX_TURNS)
     original = client.create
 
     async def create(**kwargs):
@@ -380,18 +380,18 @@ def test_bad_arguments_do_not_execute_tool(tmp_path, arguments):
 
 
 @pytest.mark.parametrize("sequence", [
-    [None] * MAX_TURNS,
-    ["classify_bom"] * MAX_TURNS,
+    [None] * AGENT_MAX_TURNS,
+    ["classify_bom"] * AGENT_MAX_TURNS,
 ])
 def test_non_finishing_agent_is_bounded_and_does_not_write_brief(tmp_path, sequence):
     client = DemoClient(sequence)
-    with pytest.raises(RuntimeError, match=f"within {MAX_TURNS} turns"):
+    with pytest.raises(RuntimeError, match=f"within {AGENT_MAX_TURNS} turns"):
         execute(client, tmp_path)
-    assert len(client.requests) == MAX_TURNS
+    assert len(client.requests) == AGENT_MAX_TURNS
     assert not (tmp_path / "brief.md").exists()
     usage = json.loads((tmp_path / "token_usage.json").read_text())
     assert usage["status"] == "failed"
-    assert usage["stages"]["agent"]["api_calls"] == MAX_TURNS
+    assert usage["stages"]["agent"]["api_calls"] == AGENT_MAX_TURNS
 
 
 @pytest.mark.parametrize("reason", [None, "max_output_tokens", "content_filter"])

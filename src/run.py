@@ -11,10 +11,12 @@ from pathlib import Path
 from openai import AsyncOpenAI
 
 from src.classify.cache import ClassificationCache
-from src.classify.classifier import MODEL, Classifier, write_classified
+from src.classify.classifier import Classifier, write_classified
 from src.bom.flatten import Bom, write_components
 from src.brief import build_brief_data, cost_pressure_markdown
-from src.config import BOM_CSV, HTS_JSON, OUT_DIR
+from src.config import (
+    AGENT_MAX_OUTPUT_TOKENS, AGENT_MAX_TURNS, AGENT_MODEL, BOM_CSV, HTS_JSON, OUT_DIR,
+)
 from src.duty.dataweb import discover_top_import_countries, write_country_rankings
 from src.duty.scenarios import calculate_duty_scenarios, write_scenarios
 from src.hts.index import HtsIndex
@@ -22,9 +24,6 @@ from src.hts.render import render
 from src.usage import TokenUsage
 from src.console import console_event
 from src.events import Events
-
-MAX_TURNS = 8
-MAX_OUTPUT_TOKENS = 9000
 
 INSTRUCTIONS = """Complete classify_bom → find_top_import_countries →
 calculate_duty_scenarios in order, following tool error feedback. Do not ask
@@ -107,7 +106,6 @@ class BomAnalysis:
             render(self.index),
             ClassificationCache(), client,
             usage=usage,
-            events=self.events,
         )
         self.classifications = None
         self.country_rankings = None
@@ -119,7 +117,16 @@ class BomAnalysis:
 
     async def classify_bom(self):
         if self.classifications is None:
-            self.classifications = await self.classifier.run(self.components)
+            rows = []
+            for position, component in enumerate(self.components, 1):
+                with self.events.action(
+                    "classification", reference=component.reference,
+                    position=position, total=len(self.components),
+                ) as result:
+                    row = await self.classifier.classify(component)
+                    rows.append(row)
+                    result["classification"] = asdict(row)
+            self.classifications = rows
             write_components(self.components, self.out_dir / "components.csv")
             write_classified(self.classifications, self.out_dir / "classified.csv")
         return {"status": "success"}
@@ -216,14 +223,14 @@ async def _run(bom_path, top_countries, out_dir, client, country_discovery, usag
                        "additionalProperties": False},
         "strict": True,
     } for name, (description, _) in actions.items()]
-    for turn in range(1, MAX_TURNS + 1):
+    for turn in range(1, AGENT_MAX_TURNS + 1):
         with events.action("agent", turn=turn, results_ready=analysis.brief_data is not None) as outcome:
             response = await usage.request(
                 client.responses.create, "agent", f"turn-{turn}",
-                model=MODEL,
+                model=AGENT_MODEL,
                 instructions=INSTRUCTIONS,
                 input=conversation,
-                max_output_tokens=MAX_OUTPUT_TOKENS,
+                max_output_tokens=AGENT_MAX_OUTPUT_TOKENS,
                 tools=tools,
                 tool_choice="auto",
                 parallel_tool_calls=False,
@@ -233,7 +240,7 @@ async def _run(bom_path, top_countries, out_dir, client, country_discovery, usag
                 reason = getattr(details, "reason", None) or "unknown"
                 raise RuntimeError(
                     f"Incomplete model response (status={response.status}, "
-                    f"reason={reason}, max_output_tokens={MAX_OUTPUT_TOKENS})"
+                    f"reason={reason}, max_output_tokens={AGENT_MAX_OUTPUT_TOKENS})"
                 )
             calls = [item for item in response.output if item.type == "function_call"]
             outcome["functions"] = [call.name for call in calls]
@@ -283,7 +290,7 @@ async def _run(bom_path, top_countries, out_dir, client, country_discovery, usag
         conversation.append({
             "type": "function_call_output", "call_id": call.call_id, "output": output,
         })
-    raise RuntimeError(f"Agent did not finish within {MAX_TURNS} turns")
+    raise RuntimeError(f"Agent did not finish within {AGENT_MAX_TURNS} turns")
 
 
 def main() -> None:

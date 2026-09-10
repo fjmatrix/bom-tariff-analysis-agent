@@ -13,9 +13,9 @@ import pytest
 
 from src.classify.cache import ClassificationCache
 from src.classify.prompts import component_prompt
-from src.classify.classifier import MODEL, Classifier, HeadingSelection, Selection, resolve
+from src.classify.classifier import Classifier, HeadingSelection, Selection
 from src.bom.flatten import Component
-from src.config import HTS_JSON
+from src.config import CLASSIFICATION_MODEL, HTS_JSON
 from src.hts.index import HtsIndex
 from src.hts.render import render
 
@@ -37,7 +37,9 @@ def component():
 
 def test_valid_selection_resolves_to_loaded_code(component, tree):
     choice = next(i for i, r in enumerate(tree.candidates) if r.htsno == "7318.16.00.60")
-    result = resolve(component, Selection(choice=choice, evidence="Nuts"), tree.candidates)
+    result = Classifier(tree, None, None)._build_classification(
+        component, Selection(choice=choice, evidence="Nuts"),
+    )
     assert result.status == "classified"
     assert result.code == "7318.16.00.60"
 
@@ -52,7 +54,9 @@ def test_valid_selection_resolves_to_loaded_code(component, tree):
 def test_invalid_and_abstained_selections_have_no_usable_code(
     component, tree, choice, evidence, reason,
 ):
-    result = resolve(component, Selection(choice=choice, evidence=evidence), tree.candidates)
+    result = Classifier(tree, None, None)._build_classification(
+        component, Selection(choice=choice, evidence=evidence),
+    )
     assert result.status != "classified"
     assert result.code is None
     assert result.reason == reason
@@ -84,19 +88,19 @@ class StubClient:
 def test_disk_cache_refreshes_after_description_change(component, tree, index, tmp_path):
     client = StubClient(index)
     path = tmp_path / "nested/cache.sqlite3"
-    first = asyncio.run(Classifier(index, ClassificationCache(path), client).run([component]))[0]
+    first = asyncio.run(Classifier(index, ClassificationCache(path), client).classify(component))
     classifier = Classifier(index, ClassificationCache(path), client)
-    asyncio.run(classifier.run([component]))
+    asyncio.run(classifier.classify(component))
     assert len(client.requests) == 2
 
     component.name = "Stainless steel coach screw"
-    result = asyncio.run(classifier.run([component]))[0]
+    result = asyncio.run(classifier.classify(component))
     assert len(client.requests) == 4
     assert result.name == component.name
     assert result.code == first.code
     assert classifier.usage.report()["totals"]["cache_hits"] == 1
     request = client.requests[0]
-    assert request["model"] == MODEL
+    assert request["model"] == CLASSIFICATION_MODEL
     assert request["instructions"] == classifier.system
     assert request["text_format"] is HeadingSelection
     assert tree.text not in request["input"][0]["content"]
@@ -105,19 +109,19 @@ def test_disk_cache_refreshes_after_description_change(component, tree, index, t
 def test_prompt_and_model_changes_reuse_cache(component, tree, index, tmp_path, monkeypatch):
     client = StubClient(index)
     classifier = Classifier(index, ClassificationCache(tmp_path / "cache.sqlite3"), client)
-    asyncio.run(classifier.run([component]))
+    asyncio.run(classifier.classify(component))
     classifier.system += "\nChanged classification instructions"
-    monkeypatch.setattr("src.classify.classifier.MODEL", "another-model")
-    asyncio.run(classifier.run([component]))
+    monkeypatch.setattr("src.classify.classifier.CLASSIFICATION_MODEL", "another-model")
+    asyncio.run(classifier.classify(component))
     assert len(client.requests) == 2
 
 
 def test_reordered_candidates_reuse_hts_number(component, tree, index, tmp_path):
     client = StubClient(index)
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
-    first = asyncio.run(Classifier(index, cache, client).run([component]))[0]
+    first = asyncio.run(Classifier(index, cache, client).classify(component))
     reordered = HtsIndex(list(reversed(index.records)))
-    result = asyncio.run(Classifier(reordered, cache, client).run([component]))[0]
+    result = asyncio.run(Classifier(reordered, cache, client).classify(component))
     assert result == first
     assert len(client.requests) == 2
 
@@ -135,8 +139,8 @@ def test_unsupported_cached_classification_is_refreshed(
     cache.put(component.reference, htsno, evidence,
               hashlib.sha256(component_prompt(component).encode()).hexdigest())
     classifier = Classifier(index, cache, client)
-    result = asyncio.run(classifier.run([component]))[0]
-    asyncio.run(classifier.run([component]))
+    result = asyncio.run(classifier.classify(component))
+    asyncio.run(classifier.classify(component))
     assert len(client.requests) == 2
     assert cache.get(component.reference) == {
         "reference": component.reference, "htsno": result.code, "evidence": "Nuts", "rationale": "",
@@ -170,7 +174,7 @@ def test_unresolved_classification_is_not_cached(component, tree, index, tmp_pat
     client = StubClient(index)
     client.selection = Selection(choice=choice, evidence=evidence)
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
-    result = asyncio.run(Classifier(index, cache, client).run([component]))[0]
+    result = asyncio.run(Classifier(index, cache, client).classify(component))
     assert result.code == "7318"
     assert result.status == "partial"
     assert cache.get(component.reference) is None
@@ -187,10 +191,10 @@ def test_completed_classification_survives_later_failure(component, tree, index,
         return await parse(**kwargs)
 
     client.parse = fail_second
+    classifier = Classifier(index, ClassificationCache(path), client)
+    asyncio.run(classifier.classify(component))
     with pytest.raises(RuntimeError, match="provider unavailable"):
-        asyncio.run(Classifier(index, ClassificationCache(path), client).run([
-            component, replace(component, reference="X2"),
-        ]))
+        asyncio.run(classifier.classify(replace(component, reference="X2")))
     assert ClassificationCache(path).get(component.reference)["htsno"] == "7318.16.00.60"
     assert ClassificationCache(path).get("X2") is None
 
@@ -207,5 +211,5 @@ def test_missing_or_incomplete_answer_is_not_cached(
     ))
     cache = ClassificationCache(tmp_path / "cache.sqlite3")
     with pytest.raises(RuntimeError, match="no complete classification"):
-        asyncio.run(Classifier(index, cache, client).run([component]))
+        asyncio.run(Classifier(index, cache, client).classify(component))
     assert cache.get(component.reference) is None
