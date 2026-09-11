@@ -17,7 +17,7 @@ from src.tui.activity import ActivityView
 from src.tui.app import BomApp
 from src.tui.decisions import DecisionView
 from src.tui.parts import PartsView
-from test_run import DemoClient, fake_discovery
+from test_run import DemoClient, fake_discovery, fake_bls
 
 
 @pytest.mark.parametrize("size", [(140, 44), (90, 40), (80, 24)])
@@ -26,7 +26,7 @@ def test_live_run_navigation_and_business_results(tmp_path, monkeypatch, size):
 
     async def exercise():
         app = BomApp(ROOT / "examples/two_parts.csv", 1, tmp_path,
-                     runner=partial(run, client=DemoClient(), country_discovery=fake_discovery))
+                     runner=partial(run, client=DemoClient(), country_discovery=fake_discovery, bls_lookup=fake_bls))
         async with app.run_test(size=size) as pilot:
             await app.workers.wait_for_complete()
             await pilot.pause()
@@ -68,7 +68,7 @@ def test_cancel_preserves_screen_and_marks_usage(tmp_path, monkeypatch):
 
         client.parse = waiting
         app = BomApp(ROOT / "examples/two_parts.csv", 1, tmp_path,
-                     runner=partial(run, client=client, country_discovery=fake_discovery))
+                     runner=partial(run, client=client, country_discovery=fake_discovery, bls_lookup=fake_bls))
         async with app.run_test() as pilot:
             await asyncio.wait_for(entered.wait(), timeout=5)
             await pilot.pause()
@@ -141,7 +141,7 @@ def test_brief_failure_keeps_calculated_results_visible(tmp_path, monkeypatch):
 
         client.create = fail_after_calculation
         app = BomApp(ROOT / "examples/two_parts.csv", 1, tmp_path,
-                     runner=partial(run, client=client, country_discovery=fake_discovery))
+                     runner=partial(run, client=client, country_discovery=fake_discovery, bls_lookup=fake_bls))
         async with app.run_test(size=(140, 44)) as pilot:
             await app.workers.wait_for_complete()
             await pilot.pause()

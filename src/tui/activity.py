@@ -10,7 +10,7 @@ from textual.widgets import LoadingIndicator, ProgressBar, RichLog, Static
 STAGES = {
     "load": "Load BOM", "classify_bom": "Classify",
     "find_top_import_countries": "Rank origin countries by import value",
-    "calculate_duty_scenarios": "Calculate", "brief": "Brief",
+    "calculate_cost_analysis": "Calculate duty and input costs", "brief": "Brief",
 }
 SYMBOLS = {"started": "◌", "completed": "✓", "failed": "✕",
            "cancelled": "–", "rejected": "!", "skipped": "!"}
@@ -49,6 +49,7 @@ def describe(event):
                      if functions else "Agent responded - no function call")
         return f"{label} - turn {data['turn']}"
     return {"load": "Validate and aggregate BOM", "country_metadata": "Load country directory",
+            "bls_lookup": "Map HTS codes and retrieve BLS indices",
             "brief": "Save decision brief", "run": "Analysis"}.get(event.name, event.name)
 
 

@@ -3,13 +3,17 @@
 import asyncio
 import json
 from copy import deepcopy
+from datetime import date
+from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+import httpx
 
-from src.classify.classifier import HeadingSelection, Selection
-from src.config import AGENT_MAX_TURNS, HTS_JSON, ROOT
+from src.bls import enrich_price_indices
+from src.classify.classifier import Selection
+from src.config import AGENT_MAX_OUTPUT_TOKENS, AGENT_MAX_TURNS, HTS_JSON, ROOT
 from src.hts.index import HtsIndex
 from src.hts.render import render
 from src.run import BomAnalysis, run
@@ -18,6 +22,7 @@ from src.run import BomAnalysis, run
 @pytest.fixture(autouse=True)
 def isolate_classification_cache(tmp_path, monkeypatch):
     monkeypatch.setattr("src.classify.cache.ROOT", tmp_path)
+    monkeypatch.setattr("src.run.enrich_price_indices", fake_bls)
 
 
 def fake_usage(input_tokens=100, output_tokens=20):
@@ -39,6 +44,17 @@ async def fake_discovery(codes, top_n):
     }
 
 
+async def fake_bls(codes, *, baseline_period=None, current_period=None):
+    return {
+        "baseline_period": "2025-07", "current_period": "2026-07",
+        "indices": {code: {
+            "series_id": "EIUIP7318", "category": "7318", "name": "Fasteners",
+            "baseline_index": 100, "current_index": 110,
+            "baseline_period": "2025-07", "current_period": "2026-07",
+        } for code in codes},
+    }
+
+
 class DemoClient:
     def __init__(self, sequence=None):
         self.responses = self
@@ -47,7 +63,7 @@ class DemoClient:
         self.sequence = iter(sequence or [
             "classify_bom",
             "find_top_import_countries",
-            "calculate_duty_scenarios",
+            "calculate_cost_analysis",
             None,
         ])
 
@@ -68,7 +84,7 @@ class DemoClient:
             if isinstance(item, dict) and item.get("type") == "function_call_output"
             and item["call_id"] in {
                 call.call_id for call in kwargs["input"]
-                if getattr(call, "name", None) == "calculate_duty_scenarios"
+                if getattr(call, "name", None) == "calculate_cost_analysis"
             }
         ), {})
         washer = result.get("scenarios", {}).get("DEMO-WASHER", {}).get("countries", {})
@@ -85,17 +101,10 @@ class DemoClient:
         prompt = kwargs["input"][0]["content"]
         code = "7318.16.00.60" if "DEMO-NUT" in prompt else "7318.21.00.30"
         index = HtsIndex.load(HTS_JSON)
-        if kwargs["text_format"] is HeadingSelection:
-            headings = [row for row in index.records if row.digits == 4]
-            return SimpleNamespace(status="completed", usage=fake_usage(1000, 100),
-                                   output_parsed=HeadingSelection(
-                                       choices=[next(i for i, row in enumerate(headings) if row.htsno == "7318")],
-                                       reason="matched", rationale="Fastener", missing_attributes=[],
-                                   ))
-        branch = render(index, headings=["7318"], include_parents=True)
-        choice = next(i for i, row in enumerate(branch.candidates) if row.htsno == code)
+        tree = render(index)
+        choice = next(i for i, row in enumerate(tree.candidates) if row.htsno == code)
         return SimpleNamespace(status="completed", usage=fake_usage(1000, 100), output_parsed=Selection(
-            choice=choice, evidence=index.get(code).description,
+            choice=choice, rationale="Fastener",
         ))
 
 
@@ -123,7 +132,7 @@ def test_observed_run_preserves_outputs_and_emits_results_before_brief(tmp_path,
     assert names.index("business_results") < names.index("brief")
     assert [event.data["functions"] for event in observed
             if event.name == "agent" and event.status == "completed"] == [
-        ["classify_bom"], ["find_top_import_countries"], ["calculate_duty_scenarios"], [],
+        ["classify_bom"], ["find_top_import_countries"], ["calculate_cost_analysis"], [],
     ]
     assert observed[-1].name == "run" and observed[-1].status == "completed"
     assert len([event for event in observed if event.name == "usage" and event.status == "cache_hit"]) == 2
@@ -137,7 +146,7 @@ def test_reused_tools_do_not_duplicate_part_events(tmp_path):
     asyncio.run(run(
         ROOT / "examples/two_parts.csv", 1, tmp_path,
         client=DemoClient(["classify_bom", "classify_bom", "find_top_import_countries",
-                           "calculate_duty_scenarios", None]),
+                           "calculate_cost_analysis", None]),
         country_discovery=fake_discovery, on_event=observed.append,
     ))
     assert len([event for event in observed if event.name == "classification" and event.status == "started"]) == 2
@@ -216,13 +225,13 @@ def test_owned_client_closes_after_success_or_failure(tmp_path, monkeypatch, fai
 def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     client = DemoClient()
     brief = execute(client, tmp_path)
-    assert client.classifier_calls == 4
+    assert client.classifier_calls == 2
     assert len(client.requests) == 4
     expected_tools = {
-        "classify_bom", "find_top_import_countries", "calculate_duty_scenarios",
+        "classify_bom", "find_top_import_countries", "calculate_cost_analysis",
     }
     for request in client.requests:
-        assert request["max_output_tokens"] == 8192
+        assert request["max_output_tokens"] == AGENT_MAX_OUTPUT_TOKENS
         assert {tool["name"] for tool in request["tools"]} == expected_tools
         assert request["tool_choice"] == "auto"
         assert request["parallel_tool_calls"] is False
@@ -240,6 +249,10 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert result["brief_data"] == facts
     assert facts["trade_period"] == {"period_start": "09/2025", "period_end": "08/2026"}
     assert facts["lookup_errors"] == {}
+    pressure = facts["index_implied_cost_pressure"]
+    assert pressure["current_period"] == "2026-07"
+    assert pressure["summary"]["weighted_index_change_pct"] == 0.1
+    assert pressure["items"][0]["benchmark"]["series_id"] == "EIUIP7318"
     assert facts["summary"]["known_current_duty_per_finished_product_usd"] == 0.58
     assert facts["summary"]["potentially_addressable_pct_known_exposure"] == 100
     assert facts["sourcing_opportunities"][0]["break_even_alternative_purchase_price_per_piece_usd"] == 0.529
@@ -254,12 +267,12 @@ def test_workflow_passes_results_and_writes_all_deliverables(tmp_path, capsys):
     assert "Token totals [run]" in output
     usage = json.loads((tmp_path / "token_usage.json").read_text())
     assert usage["status"] == "completed"
-    assert usage["totals"]["total_tokens"] == 4880
-    assert usage["stages"]["classification"]["total_tokens"] == 4400
+    assert usage["totals"]["total_tokens"] == 2680
+    assert usage["stages"]["classification"]["total_tokens"] == 2200
     assert usage["stages"]["agent"]["total_tokens"] == 480
-    assert usage["totals"]["api_calls"] == 8
+    assert usage["totals"]["api_calls"] == 6
     assert [event["label"] for event in usage["events"]] == [
-        "turn-1", "DEMO-NUT", "DEMO-NUT", "DEMO-WASHER", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
+        "turn-1", "DEMO-NUT", "DEMO-WASHER", "turn-2", "turn-3", "turn-4",
     ]
 
     replay = DemoClient()
@@ -279,9 +292,9 @@ def test_agent_recovers_from_out_of_order_tools_and_early_brief(tmp_path):
         "find_top_import_countries",
         None,
         "classify_bom",
-        "calculate_duty_scenarios",
+        "calculate_cost_analysis",
         "find_top_import_countries",
-        "calculate_duty_scenarios",
+        "calculate_cost_analysis",
         None,
     ])
     execute(client, tmp_path)
@@ -290,24 +303,29 @@ def test_agent_recovers_from_out_of_order_tools_and_early_brief(tmp_path):
     assert "before writing the brief" in client.requests[2]["input"][-1]["content"]
     calculator_error = json.loads(client.requests[4]["input"][-1]["output"])
     assert "find_top_import_countries" in calculator_error["error"]
-    assert client.classifier_calls == 4
+    assert client.classifier_calls == 2
     assert (tmp_path / "brief.md").exists()
 
 
 def test_repeated_tools_reuse_completed_work(tmp_path):
     client = DemoClient()
     calls = []
+    bls_calls = []
+
+    async def bls_lookup(codes, **kwargs):
+        bls_calls.append(codes)
+        return await fake_bls(codes, **kwargs)
 
     async def discovery(codes, top_n):
         calls.append((codes, top_n))
         return await fake_discovery(codes, top_n)
 
     analysis = BomAnalysis(
-        ROOT / "examples/two_parts.csv", 1, tmp_path, client, discovery,
+        ROOT / "examples/two_parts.csv", 1, tmp_path, client, discovery, bls_lookup=bls_lookup,
     )
     first = asyncio.run(analysis.classify_bom())
     assert asyncio.run(analysis.classify_bom()) == first == {"status": "success"}
-    assert client.classifier_calls == 4
+    assert client.classifier_calls == 2
 
     assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
     rankings = analysis.country_rankings
@@ -315,10 +333,56 @@ def test_repeated_tools_reuse_completed_work(tmp_path):
     assert analysis.country_rankings is rankings
     assert calls == [(["7318.16.00.60", "7318.21.00.30"], 1)]
 
-    result = asyncio.run(analysis.calculate_duty_scenarios())
-    assert asyncio.run(analysis.calculate_duty_scenarios()) is result
+    result = asyncio.run(analysis.calculate_cost_analysis())
+    assert asyncio.run(analysis.calculate_cost_analysis()) is result
+    assert bls_calls == [["7318.16.00.60", "7318.21.00.30"]]
+    assert analysis.brief_data["index_implied_cost_pressure"]["summary"]["weighted_index_change_pct"] == 0.1
     assert set(result) == {"DEMO-NUT", "DEMO-WASHER"}
     assert rankings["7318210030"]["period_start"] == "09/2025"
+
+
+@pytest.mark.parametrize("rejected", [False, True])
+def test_bls_mapping_and_transport_feed_brief_without_blocking_duty(tmp_path, monkeypatch, rejected):
+    monkeypatch.setenv("BLS_API_KEY", "test-secret")
+    requests = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        assert payload["seriesid"] == ["EIUIP73"]
+        if rejected:
+            return httpx.Response(200, json={
+                "status": "REQUEST_NOT_PROCESSED", "message": ["Invalid key: test-secret"],
+            })
+        return httpx.Response(200, json={"status": "REQUEST_SUCCEEDED", "Results": {"series": [{
+            "seriesID": "EIUIP73", "data": [
+                {"year": "2026", "period": "M07", "value": "105", "footnotes": []},
+                {"year": "2025", "period": "M07", "value": "100", "footnotes": []},
+            ],
+        }]}})
+
+    async def exercise():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await run(
+                ROOT / "examples/two_parts.csv", 1, tmp_path, client=DemoClient(),
+                country_discovery=fake_discovery, on_event=lambda event: None,
+                bls_lookup=partial(enrich_price_indices, client=client, today=date(2026, 9, 10)),
+            )
+
+    brief = asyncio.run(exercise())
+    facts = json.loads((tmp_path / "brief_data.json").read_text())
+    assert len(requests) == 1
+    assert facts["summary"]["known_current_duty_per_finished_product_usd"] == 0.58
+    pressure = facts["index_implied_cost_pressure"]
+    if rejected:
+        assert pressure["summary"]["total_index_implied_cost_pressure"] is None
+        assert "Invalid key: [redacted]" in pressure["items"][0]["benchmark"]["attempts"][0]["reason"]
+        assert "test-secret" not in json.dumps(facts)
+        assert "Index-implied cost pressure: N/A" in brief
+    else:
+        assert pressure["summary"]["weighted_index_change_pct"] == 0.05
+        assert all(item["benchmark"]["series_id"] == "EIUIP73" for item in pressure["items"])
+        assert "2025-07 → 2026-07" in brief
 
 
 def test_unknown_tool_returns_feedback_without_dispatch(tmp_path):
@@ -326,7 +390,7 @@ def test_unknown_tool_returns_feedback_without_dispatch(tmp_path):
         "delete_files",
         "classify_bom",
         "find_top_import_countries",
-        "calculate_duty_scenarios",
+        "calculate_cost_analysis",
         None,
     ])
     execute(client, tmp_path)
@@ -348,7 +412,7 @@ def test_country_lookup_errors_still_allow_current_origin_scenarios(tmp_path):
     )
     assert asyncio.run(analysis.classify_bom()) == {"status": "success"}
     assert asyncio.run(analysis.find_top_import_countries()) == {"status": "success"}
-    result = asyncio.run(analysis.calculate_duty_scenarios())
+    result = asyncio.run(analysis.calculate_cost_analysis())
     assert result["DEMO-WASHER"]["countries"] == {
         "CN": {"duty_usd": 0.58, "savings_usd": 0.0},
     }
@@ -406,7 +470,7 @@ def test_incomplete_response_does_not_execute_tool(tmp_path, reason):
         return response
 
     client.create = create
-    with pytest.raises(RuntimeError, match=f"reason={reason or 'unknown'}, max_output_tokens=8192"):
+    with pytest.raises(RuntimeError, match=f"reason={reason or 'unknown'}, max_output_tokens={AGENT_MAX_OUTPUT_TOKENS}"):
         execute(client, tmp_path)
     assert client.classifier_calls == 0
     assert not (tmp_path / "brief.md").exists()

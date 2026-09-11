@@ -1,4 +1,4 @@
-"""Check mock lookup, spend-weighted hierarchy, and final brief integration."""
+"""Check injected benchmark data, spend-weighted hierarchy, and final brief integration."""
 
 import asyncio
 import json
@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.bls_mock import get_price_index
+from bls_fixtures import get_price_index
 from src.bom.flatten import Bom, Component
 from src.brief import build_brief_data, cost_pressure_markdown
 from src.classify.classifier import Classification
@@ -16,7 +16,7 @@ from src.hts.index import HtsIndex
 from src.run import run
 
 
-def test_mock_lookup_is_deterministic_and_covers_purchased_bom_references():
+def test_injected_indices_cover_purchased_bom_references():
     bom = Bom.load(BOM_CSV)
     for part in bom.components():
         record = get_price_index(part.reference)
@@ -26,7 +26,9 @@ def test_mock_lookup_is_deterministic_and_covers_purchased_bom_references():
         assert get_price_index(part.reference)["current_index"] > 0
     assert get_price_index("unknown-reference") is None
     assert get_price_index("7318.16.00.60") is None
-    data = build_cost_pressure(bom.components(), bom)
+    data = build_cost_pressure(bom.components(), bom, price_indices={
+        part.reference: get_price_index(part.reference) for part in bom.components()
+    })
     assert data["summary"]["total_baseline_spend"] == pytest.approx(1348.83)
     assert data["summary"]["items_with_index"] == 162
     assert data["products"][0]["total_index_implied_cost_pressure"] == pytest.approx(
@@ -51,9 +53,8 @@ def test_pressure_rollup_preserves_repeated_references_and_absolute_quantities(t
         "UP": {"current_index": 110, "baseline_index": 100},
         "DOWN": {"current_index": 90, "baseline_index": 100},
     }
-    monkeypatch.setattr("src.cost_pressure.get_price_index", records.get)
     bom = Bom.load(path)
-    data = build_cost_pressure(bom.components(), bom)
+    data = build_cost_pressure(bom.components(), bom, price_indices=records)
     assert [item["index_implied_cost_pressure"] for item in data["items"]] == [10, -5, 5, None]
     assert [row["line"] for row in data["headings"]] == [1, 4]
     assert [row["total_baseline_spend"] for row in data["headings"]] == [150, 50]
@@ -69,8 +70,9 @@ def test_pressure_rollup_preserves_repeated_references_and_absolute_quantities(t
     assert product["items_with_negative_pressure"] == 1
     components = bom.components()
     facts = build_brief_data(
-        components, [], {part.reference: {"reason": "unclassified"} for part in components},
-        HtsIndex([]), {}, bom=bom,
+        components, [Classification(part.reference, part.name, "classified", "clean", part.reference, "")
+                     for part in components], {part.reference: {"reason": "unclassified"} for part in components},
+        HtsIndex([]), {}, bom=bom, bls_data={"indices": records},
     )
     brief = cost_pressure_markdown(facts)
     assert "| Product: ROOT — Product | $200.00 | $10.00 | +5.00% | 3/4 |" in brief
@@ -85,7 +87,9 @@ def test_pressure_rollup_preserves_repeated_references_and_absolute_quantities(t
 ])
 def test_brief_shows_first_assembly_breakdown(filename, expected_headings):
     bom = Bom.load(BOM_CSV.parent / "examples" / filename)
-    data = build_cost_pressure(bom.components(), bom)
+    data = build_cost_pressure(bom.components(), bom, price_indices={
+        part.reference: get_price_index(part.reference) for part in bom.components()
+    })
     brief = cost_pressure_markdown({
         "summary": {"cost_pressure": "MEDIUM", "tariff_exposure": "Unknown",
                     "input_price_trend": "Stable", "exposure_is_partial": True},
@@ -114,7 +118,9 @@ def test_brief_keeps_assembly_alongside_direct_parts(tmp_path):
         "3,M00218,Nested part,1,ASSEMBLY,False,18\n"
     )
     bom = Bom.load(path)
-    data = build_cost_pressure(bom.components(), bom)
+    data = build_cost_pressure(bom.components(), bom, price_indices={
+        part.reference: get_price_index(part.reference) for part in bom.components()
+    })
     brief = cost_pressure_markdown({
         "summary": {"cost_pressure": "MEDIUM", "tariff_exposure": "Unknown",
                     "input_price_trend": "Stable", "exposure_is_partial": True},
@@ -140,11 +146,11 @@ def test_rollups_exclude_invalid_spend_and_index_from_both_totals(tmp_path, monk
         "2,BAD_QUANTITY,Part,-1,EMPTY,False,100\n"
         "0,ZERO,Zero spend product,1,,False,0\n"
     )
-    monkeypatch.setattr("src.cost_pressure.get_price_index", lambda ref: {
-        "current_index": 110, "baseline_index": 0 if ref == "BAD_INDEX" else 100,
-    })
     bom = Bom.load(path)
-    data = build_cost_pressure([], bom)
+    data = build_cost_pressure([], bom, price_indices={
+        row.reference: {"current_index": 110, "baseline_index": 0 if row.reference == "BAD_INDEX" else 100}
+        for row in bom.leaves
+    })
     product = data["products"][0]
     assert product["total_baseline_spend"] == 100
     assert product["total_index_implied_cost_pressure"] == 10
@@ -172,11 +178,10 @@ def test_rollups_exclude_invalid_spend_and_index_from_both_totals(tmp_path, monk
     (110, 100, 0, "Unknown", 0),
 ])
 def test_validity_and_trend_boundaries(monkeypatch, current, baseline, price, trend, pressure):
-    monkeypatch.setattr("src.cost_pressure.get_price_index", lambda ref: {
-        "current_index": current, "baseline_index": baseline,
-    })
     part = Component("PART", "Part", 1, price, 1)
-    summary = build_cost_pressure([part])["summary"]
+    summary = build_cost_pressure([part], price_indices={
+        "PART": {"current_index": current, "baseline_index": baseline},
+    })["summary"]
     assert summary["input_price_trend"] == trend
     assert summary["total_index_implied_cost_pressure"] == pytest.approx(pressure)
     assert summary["total_baseline_spend"] == (10 if pressure not in (None, 0) else 0)
@@ -208,19 +213,18 @@ def test_unmatched_index_is_unavailable_in_final_brief():
     assert "- Weighted input-price change: N/A" in brief
 
 
-def test_final_brief_uses_mock_pressure_even_when_tariffs_are_unresolved(tmp_path, monkeypatch):
+def test_final_brief_has_no_indices_when_classification_is_unresolved(tmp_path, monkeypatch):
     monkeypatch.setattr("src.classify.cache.ROOT", tmp_path)
 
-    async def classify(self, components):
-        return [Classification(part.reference, part.name, "unclassified", "mock", None, "")
-                for part in components]
+    async def classify(self, part):
+        return Classification(part.reference, part.name, "unclassified", "no_supported_candidate", None, "")
 
     async def discover(codes, top_n):
         return {}
 
-    monkeypatch.setattr("src.classify.classifier.Classifier.run", classify)
+    monkeypatch.setattr("src.classify.classifier.Classifier.classify", classify)
     requests = []
-    steps = iter(["classify_bom", "find_top_import_countries", "calculate_duty_scenarios", None])
+    steps = iter(["classify_bom", "find_top_import_countries", "calculate_cost_analysis", None])
 
     async def create(**kwargs):
         requests.append(kwargs)
@@ -235,22 +239,22 @@ def test_final_brief_uses_mock_pressure_even_when_tariffs_are_unresolved(tmp_pat
     ))
     facts = json.loads((tmp_path / "brief_data.json").read_text())
     totals = facts["index_implied_cost_pressure"]["summary"]
-    assert totals["total_baseline_spend"] == pytest.approx(1348.83)
+    assert totals["total_baseline_spend"] == 0
     assert facts["summary"]["known_current_duty_per_finished_product_usd"] is None
     assert facts["index_implied_cost_pressure"]["headings"]
     assert len(requests) == 4
     assert brief.startswith("**Cost pressure:** MEDIUM")
     assert "**Tariff exposure:** Unknown (partial coverage)" in brief
-    assert f"- Index-implied cost pressure: ${totals['total_index_implied_cost_pressure']:,.2f}" in brief
-    assert f"- Weighted input-price change: {100 * totals['weighted_index_change_pct']:+.2f}%" in brief
+    assert "- Index-implied cost pressure: N/A" in brief
+    assert "- Weighted input-price change: N/A" in brief
     assert "not observed supplier price changes" in brief
     assert "mock" not in brief.lower()
-    assert "Valid baseline spend: $1,348.83" in brief
+    assert "Valid baseline spend: $0.00" in brief
     assert "**Input cost pressure by product and heading**" in brief
     for row in facts["index_implied_cost_pressure"]["headings"]:
         assert (f"Heading: {row['component_reference']} — {row['name']}" in brief) == (
             row["parent_line"] == 0
         )
-    assert "162/162 items" in brief
+    assert "0/162 items" in brief
     assert brief.endswith("Brief body.\n")
     assert (tmp_path / "brief.md").read_text() == brief
