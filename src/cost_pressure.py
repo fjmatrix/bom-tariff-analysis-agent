@@ -1,8 +1,6 @@
-"""Index-implied cost pressure from mock benchmarks and existing BOM spend."""
+"""Pure cost-pressure calculations from supplied indices and existing BOM spend."""
 
 from math import isfinite
-
-from src.bls_mock import get_price_index
 
 
 def _summarize(items):
@@ -27,14 +25,16 @@ def _summarize(items):
     }
 
 
-def build_cost_pressure(components, bom=None):
+def build_cost_pressure(components, bom=None, *, price_indices=None,
+                        baseline_period=None, current_period=None):
+    price_indices = price_indices or {}
     items = []
     grouped = {}
     for part in bom.leaves if bom is not None else components:
-        record = get_price_index(part.reference)
+        record = price_indices.get(part.reference)
         change = None
         if record is not None:
-            current, baseline = record["current_index"], record["baseline_index"]
+            current, baseline = record.get("current_index"), record.get("baseline_index")
             if all(isinstance(value, (int, float)) and isfinite(value) and value > 0
                    for value in (current, baseline)):
                 change = round(current / baseline - 1, 12)
@@ -46,6 +46,7 @@ def build_cost_pressure(components, bom=None):
                 spend = None
         item = {
             "component_reference": part.reference, "name": part.name,
+            "benchmark": record or {"reason": "No classified HTS code with BLS data"},
             "baseline_spend": spend, "index_change": change,
             "index_implied_cost_pressure": spend * change
             if spend is not None and change is not None else None,
@@ -72,7 +73,8 @@ def build_cost_pressure(components, bom=None):
                 }
                 (products if row.parent_line is None else headings).append(rollup)
     return {
-        "source": "Deterministic mock BLS indices; not real BLS data.",
+        "source": "BLS Harmonized Import Price Index, not seasonally adjusted.",
+        "baseline_period": baseline_period, "current_period": current_period,
         "basis": "USD per finished product; counts are purchased BOM row occurrences "
                  "when hierarchy is available, otherwise aggregated components. "
                  "Weighted changes are fractional ratios (0.02 = 2%).",

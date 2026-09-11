@@ -15,6 +15,7 @@ import httpx
 
 from src import config  # Load DATAWEB_API_KEY from the repository's .env.
 from src.events import Events
+from src.hts import normalize_hts_code
 
 REPORT_URL = "https://datawebws.usitc.gov/dataweb/api/v2/report2/runReport"
 COUNTRIES_URL = "https://datawebws.usitc.gov/dataweb/api/v2/country/getAllCountries"
@@ -102,13 +103,6 @@ async def _post_report(
     return await _report_runners[loop].post(client, token, payload, events=events)
 
 
-def _code(hts_code: str) -> str:
-    code = hts_code.strip().replace(".", "")
-    if not code.isascii() or not code.isdigit() or len(code) not in (8, 10):
-        raise ValueError("HTS code must contain 8 or 10 digits, optionally dotted")
-    return code
-
-
 def trailing_12_months(today: date | None = None) -> tuple[str, str]:
     """Return the first and last month in the 12 complete months before today."""
     today = today or date.today()
@@ -120,7 +114,7 @@ def trailing_12_months(today: date | None = None) -> tuple[str, str]:
 
 
 def _payload(hts_code: str, start: str, end: str) -> dict:
-    code = _code(hts_code)
+    code = normalize_hts_code(hts_code)
     return {
         "reportOptions": {"tradeType": "Import", "classificationSystem": "HTS"},
         "searchOptions": {
@@ -227,7 +221,7 @@ async def get_imports_by_country(
     *, client: httpx.AsyncClient | None = None, events=None,
 ) -> list[dict]:
     """Return consumption customs value by origin over the requested months."""
-    code = _code(hts_code)
+    code = normalize_hts_code(hts_code)
     token = os.environ.get("DATAWEB_API_KEY")
     if not token:
         raise ValueError("DATAWEB_API_KEY is not configured")
@@ -261,7 +255,7 @@ async def discover_top_import_countries(
     if top_n < 1:
         raise ValueError("top_n must be at least 1")
     start, end = trailing_12_months(today)
-    codes = sorted({_code(code) for code in hts_codes})
+    codes = sorted({normalize_hts_code(code) for code in hts_codes})
     if not codes:
         return {}
     result = {

@@ -1,17 +1,21 @@
-# BOM Tariff Exposure Agent
+# BOM tariff & inflation analysis agent
 
 ![BOM tariff TUI progressing through analysis and opening the final brief](docs/assets/tui-demo.gif)
-
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991?logo=openai&logoColor=white)](https://platform.openai.com/)
 [![Data: USITC DataWeb](https://img.shields.io/badge/Data-USITC%20DataWeb-1f6feb)](https://dataweb.usitc.gov/)
 
-Connect your product’s BOM and purchase costs with tariff rates and import data
-to quantify cost pressure, pinpoint exposed parts, and identify sourcing actions
-that protect margin. Compare origins, estimate savings, and set purchase-price
-targets in a clear decision brief.
+A tariff & inflation analysis agent that maps each BOM part to HTS codes and
+relevant BLS inflation indices to quantify cost pressure, identify alternative
+sourcing countries with lower duties, and recommend pricing or surcharge actions
+that protect margin.
+
+- **Tariff and trade data ource:** [HTS](https://hts.usitc.gov/) and [USITC DataWeb](https://dataweb.usitc.gov/)
+- **Inflation data source:** [Bureau of Labor Statistics (BLS)](https://www.bls.gov/)
+- **BOM part → HTS code:** LLM-driven similarity matching
+- **HTS code → BLS series ID:** Deterministic mapping rules
 
 ## Workflow
 
@@ -23,7 +27,7 @@ flowchart TB
     S1["`**1 · Classify**
     flatten the BOM, identify HTS codes for purchased parts`"]
     S2["`**2 · Enrich**
-    pull tariff rates and the top import origins per BOM code from USITC, and inflation data from BLS*`"]
+    pull tariff rates and the top import origins per BOM code from USITC, and import price indices from BLS`"]
     S3["`**3 · Evaluate & recommend**
     compare duty, savings, and break-even prices; rank actions`"]
     OUT[/"`Decision brief
@@ -41,15 +45,24 @@ Import origins are ranked by U.S. customs value in USD over the last 12 complete
 months. Python calculates duty and savings; the model classifies parts and writes
 the brief.
 
-\*Tariff and import data are real from USITC databweb real time endpoints. BLS endpoint is currently sythentic.
+Tariff rates use the HTS snapshot, import rankings use USITC DataWeb, and price & inflation
+indices use the live BLS Public Data API.
 
 ## Run
 
-Requires Python 3.11+, the project dependencies, and `OPENAI_API_KEY` and
-`DATAWEB_API_KEY` in `.env` or your shell. With the existing environment:
+Requires Python 3.11+, the project dependencies, and `OPENAI_API_KEY`,
+`DATAWEB_API_KEY`, and `BLS_API_KEY` in `.env` or your shell. With the existing environment:
 
 ```bash
 .venv/bin/python -m src.run --bom examples/two_parts.csv --out out/two_parts
+```
+
+The default BLS comparison is the latest available completed month across the
+requested series versus the same month one year earlier. All components use
+that same pair of months. To choose a comparison explicitly:
+
+```bash
+.venv/bin/python -m src.run --bom examples/two_parts.csv --out out/two_parts --bls-current-period 2026-07 --bls-baseline-period 2025-07
 ```
 
 Defaults: `--bom BOM.csv`, `--out out`. For the interactive terminal, install the
@@ -97,11 +110,36 @@ impact; weighted index change expresses it as a percentage of baseline spend.
   movement for that component.
 
 These are index levels, not dollar prices. For example, a baseline of 110.0 and
-a current value of 117.4 imply a 6.73% increase (`117.4 / 110.0 − 1`). The current
-implementation assigns fixed mock values by component reference; it does not
-fetch real BLS series or associate the values with actual dates.
+a current value of 117.4 imply a 6.73% increase (`117.4 / 110.0 − 1`). Both
+observations must come from the same BLS series and the selected comparison dates.
+
+`calculate_cost_analysis()` orchestrates duty calculation and BLS enrichment,
+then passes both results into `build_brief_data()`. BLS mapping, transport, and
+enrichment live in `src/bls`; `src/cost_pressure.py` only calculates from supplied
+data and performs no network calls.
+
+The mapping follows the reference loader: read root `ei.series`, keep
+`index_code == "IP"` and IDs matching `^EIUIP(?:\d{2}|\d{4})$`, then try the
+HTS 4-digit heading before the 2-digit chapter. The loader retains its original
+body, with a scoped pandas string option for compatibility with pandas 3.
+Only series present in this catalog are eligible; refreshing `ei.series` is a
+manual catalog update, separate from retrieving current observations.
+
+If the heading lacks either observation, the chapter may supply both instead.
+For example, the supplied `EIUIP8483` series begins in December 2025 and cannot
+yet provide a year-over-year comparison. Missing data and lookup failures remain
+unavailable; no synthetic values are substituted. API calls deduplicate series,
+batch up to 50 per request, and retry transient failures up to three attempts.
+Completed enrichment is reused within a run; observations are fetched afresh
+on subsequent runs so BLS revisions can be reflected.
+
+`brief_data.json` records each purchased row's benchmark category, series ID,
+index values, dates, footnotes, and fallback or failure reasons under
+`index_implied_cost_pressure.items[].benchmark`. The brief reports comparison
+dates and index/spend coverage. These are broad import-market benchmarks, not
+origin-specific or supplier-specific prices.
 
 Sums include purchased components with valid spend and index data, counted once
 within each assembly or product. Cost pressure is `N/A` without valid data;
-weighted change is `N/A` when baseline spend is zero. Indices are currently
-mocked benchmarks, not observed supplier price changes.
+weighted change is `N/A` when baseline spend is zero. Indices measure benchmark
+movement, not observed supplier price changes.

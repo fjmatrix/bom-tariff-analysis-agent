@@ -8,7 +8,8 @@ def percent(numerator, denominator):
     return round(100 * numerator / denominator, 4) if denominator > 0 else None
 
 
-def build_brief_data(components, classifications, scenarios, index, country_rankings, *, bom=None):
+def build_brief_data(components, classifications, scenarios, index, country_rankings, *,
+                     bom=None, bls_data=None):
     total_cost = sum(part.extended_cost_usd for part in components)
     classified = {row.reference: row for row in classifications}
     exposures = []
@@ -69,7 +70,13 @@ def build_brief_data(components, classifications, scenarios, index, country_rank
     savings_total = round(sum(row["duty_savings_per_finished_product_usd"] for row in opportunities), 2)
     # Country discovery uses the same period for every HTS lookup, including failures.
     ranking = next(iter(country_rankings.values()), None)
-    cost_pressure = build_cost_pressure(components, bom)
+    bls_data = bls_data or {}
+    price_indices = {row.reference: bls_data.get("indices", {}).get(row.code)
+                     for row in classifications if row.status == "classified" and row.code}
+    cost_pressure = build_cost_pressure(
+        components, bom, price_indices=price_indices,
+        baseline_period=bls_data.get("baseline_period"), current_period=bls_data.get("current_period"),
+    )
     exposure_pct = percent(current_total, total_cost) if exposures else None
     trend = cost_pressure["summary"]["input_price_trend"]
     tariff, pressure = classify_cost_pressure(exposure_pct, trend)
@@ -134,6 +141,8 @@ def cost_pressure_markdown(brief_data):
         f"- Weighted input-price change: {weighted}\n\n"
         f"USD per finished product. Index/spend coverage: "
         f"{totals['items_with_valid_spend_and_index']}/{len(data['items'])} items.\n\n"
+        f"BLS Harmonized import indices: {data.get('baseline_period') or 'N/A'} → "
+        f"{data.get('current_period') or 'N/A'}.\n\n"
         f"> {data['note']}\n\n"
     )
     headings_by_parent = {}

@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
 HTS_JSON = ROOT / "htsdata.json"
+BLS_SERIES = ROOT / "ei.series"
 BOM_CSV = ROOT / "BOM.csv"
 OUT_DIR = ROOT / "out"
 
